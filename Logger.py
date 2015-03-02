@@ -2,7 +2,7 @@
 Logger handles saving messages to the logs and writing to terminal
 
 Matthew Russell
-Feb 22 2015
+mar 2, 2015
 """
 #system import
 import time, os, errno
@@ -33,11 +33,15 @@ class Logger:
 			fileObj.flush()
 			fileObj.close()
 		#Write a message to the terminal
-		print("%s%s" % (timestamp, message))
 
 	def error(self, message):
 		self.write("[ERROR] " + message)
+		print("[ERROR] %s" % (message))
+
 	def info(self, message):
 		self.write("[INFO] " + message)
+		print("[INFO] %s" % (message))
+
 	def log(self, message):
 		self.write(message)
+		print("%s" % (message))

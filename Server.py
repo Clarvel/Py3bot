@@ -1,7 +1,7 @@
 """
 IRC server class
 Matthew Russell
-last updated Feb 28, 2015
+last updated Mar 2, 2015
 
 class handles communication between the IRC bot and the connected server
 
@@ -12,6 +12,7 @@ class handles communication between the IRC bot and the connected server
 import socket
 import threading
 import Regexes
+import time
 from Logger import Logger
 
 class Server():
@@ -37,12 +38,13 @@ class Server():
 		self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.logger = Logger("")
 
-	def connect(self, host, port, password = None): # connect to server
+	def connect(self, host, port, ID, password = None): # connect to server
 		if(not self.closed):
 			self.logger.error("Server already connected")
 			return False
 
 		serv_addr = (host, port)
+		self.ID = ID
 		self.logger = Logger("servers/%s/%s" % (host, host))
 		try:
 			self.connection.connect(serv_addr)
@@ -63,6 +65,16 @@ class Server():
 			self.listenThread = threading.Thread(target=self.listen) # spawn listening thread
 			self.listenThread.daemon = True # ensure thread dies when main thread dies
 			self.listenThread.start() # start listening thread
+
+			# wait for ping before continuing, otherwise timeout and fail
+			self.pinged = False
+			timer = 0
+			while not self.pinged:
+				time.sleep(1)
+				timer += 1
+				if timer >= 30:
+					self.logger.error("Connection to host %s failed: Did not receive ping after %is" % (host, timer))
+					return False
 			return True
 
 	def close(self, message = ""):
@@ -104,11 +116,15 @@ class Server():
 		else:
 			self.logger.error("Bad channel key: %s" % (chanID))
 
-	def getChan(self): # return current channel
+	def getChan(self): # return current channel string
 		if(self.chanKey == None):
 			raise Exception("No connected Channels for this Server")
 		return self.chanList[self.chanKey]
 
+	def getChanKey(self): # return current channel key
+		if(self.chanKey == None):
+			return "None"
+		return self.chanKey
 
 	def listen(self):
 		while not self.closed: # while connection isn't closed
@@ -130,13 +146,26 @@ class Server():
 					parseThread.start()
 
 	def parseInput(self, chunk): # Perform some action based on the command fed to the bot
+		#print(chunk)
 		strList = chunk.split("\n")
 		for string in strList:
+			string = string.rstrip() # remove unwanted junk from end
 			msg = Regexes.REMatch(string)
 			if   msg.match(Regexes.PING):
+				self.pinged = True
 				self.sendData("PONG %s" % (msg.group(1).strip()))
 			elif msg.match(Regexes.PMSG):
-				self.logger.log("[%s %s] %s" % (self.host, msg.group(4), msg.group(5)))
+				if   msg.group(5).startswith(self.bot.alertChar): # bot alert command
+					options = msg.group(5).split() # split at whitespace
+					cmd = options.pop(0) # split off command
+					cmd = cmd.split(self.bot.alertChar, 1)[1] # remove bot cmd char
+					self.bot.botMsg(self.ID, self.getChanKey(), msg.group(1), cmd, options)
+				else:
+					args = Regexes.REMatch(msg.group(5))
+					if   args.match(Regexes.ACTN):
+						self.logger.log("[%s %s]* %s %s" % (self.ID, msg.group(4), msg.group(1), args.group(1)))
+					else:
+						self.logger.log("[%s %s %s] %s" % (self.ID, msg.group(4), msg.group(1), msg.group(5)))
 			elif msg.match(Regexes.SMSG):
 				args = Regexes.REMatch(msg.group(1))
 				if   args.match(Regexes.SJON):
@@ -150,16 +179,17 @@ class Server():
 					else:
 						self.logger.info("[SERV_PM] [%s] %s" % (msg.group(1), msg.group(2)))
 				else:
-					self.logger.info("[SERV_MSG] [%s] %s" % (msg.group(1), msg.group(2)))
+					self.logger.info("[SERV_MSG] %s" % ( msg.group(2)))
 			elif msg.match(Regexes.NTCE):
 				self.logger.log("[NOTICE][%s] %s" % (msg.group(1), msg.group(2)))
 			elif msg.match(Regexes.MODE):
-				self.logger.info("[MODE] %s" % (msg.group(3)))
+				self.logger.info("Mode: %s" % (msg.group(3)))
 			elif msg.match(Regexes.JOIN):
-				self.logger.info("[CHAN_JOIN] %s" % (msg.group(3)))
+				self.logger.info("%s joined channel %s on %s" % (msg.group(1), msg.group(3), self.ID))
+			elif msg.match(Regexes.QUIT):
+				self.logger.info("[QUIT %s] %s" % (self.ID, msg.group(3)))
 			else:
 				self.logger.info("[###]%s" % string)
-
 
 	def sendData(self, msg):
 		#Send msg over the connection socket to server
@@ -190,7 +220,7 @@ class Server():
 		self.name = name
 
 	def termCmd(self, cmd, options):
-		if   cmd == "join" or cmd =="c":
+		if   cmd == "join" or cmd =="c" or cmd == "channel":
 			self.channel(*options)
 		elif cmd == "setch"	or cmd == "sc":
 			self.swapChan(*options)
@@ -207,6 +237,8 @@ class Server():
 			elif cmd == "reply" or cmd == "r":
 				pass # TODO
 				self.sendData("%s" % (optStr))
+			elif cmd == "me":
+				self.sendMsg("\x01" + "ACTION %s\x01" % (optStr))
 			elif cmd == "oper": 
 				self.sendData("OPER %s" % optStr)
 			elif cmd == "mode":
@@ -239,8 +271,4 @@ class Server():
 			elif cmd == "kill":
 				self.sendData("KILL %s" % (optStr))
 			else:
-				raise Exception("Bad command: [%s]", cmd)
-
-
-
-
+				raise Exception("Bad command: [%s]" % cmd)

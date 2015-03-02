@@ -1,7 +1,7 @@
 """
 Stored Regexes for the python IRC bot
 Matthew Russell
-Feb 22, 2015
+Mar 2, 2015
 
 IRC_CMDList
 BotCMDList
@@ -12,6 +12,9 @@ import re
 
 PING = re.compile(r':?PING(.*)') # (response key) # ping message
 PMSG = re.compile(r':(.*)!(.*@.*) (.*) (.*) :(.*)') # (sender)(IP)(PRIVMSG)(channel or ME)(message) # private message
+
+ACTN = re.compile(r'.?ACTION (.*)') # (message) # action privmsg
+
 SMSG = re.compile(r':.* [0-9]+ (.*) :(.*)') # (OPTIONS)(message) # server message
 
 SJON = re.compile(r'JOIN') # if server join message
@@ -23,9 +26,8 @@ SMCH = re.compile(r'(#.*)') # channel
 
 NTCE = re.compile(r':.* NOTICE (.*):(.*)')
 MODE = re.compile(r':(.*) MODE (.*) :(.*)') # (ME) (ME) (message)
-JOIN = re.compile(r':(.*)!(.*)@.* JOIN :(.*)') # (ME) (ME) (message) # channel join reply
-
-
+JOIN = re.compile(r':(.*)!(.*@.*) JOIN :(.*)') # (ME) (IP) (message) # channel join message
+QUIT = re.compile(r':(.*)!(.*@.*) QUIT :(.*)') # (name) (IP) (message)
 
 
 #MSG_PAT = re.compile(r':?.* (.*) :(.*)')
@@ -49,3 +51,5 @@ class REMatch(object):
 
     def groups(self):
         return self.re_match.groups()
+
+        

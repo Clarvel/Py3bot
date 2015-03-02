@@ -6,12 +6,14 @@ SETTINGS = {
 			"PORT" : 6667,
 			"PASSWORD" : None,
 			"CHANLIST" : {
-				"test" : {"NAME" : "#test", "PASSWORD" : ""}
+				"test" : {"NAME" : "#test", "PASSWORD" : "", "LOG" : True, "BANNEDMODS" : None},
+				"coup" : {"NAME" : "#coup", "PASSWORD" : "", "LOG" : True, "BANNEDMODS" : None}
 			},
-			"QUITMSG" : "Derp Derpington"
+			"QUITMSG" : "Derp Derpington",
+			"NICKS" : ["Pybubbles", "PI", "PY", "Py3bot"]
 		}
 	},
-	"NAME" : "Pybubbles",
+	"NAME" : "Py3bot",
 	"MODS" : ["Default"],
 	"ALERTCHAR" : "@"
 }

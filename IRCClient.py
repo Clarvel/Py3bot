@@ -1,7 +1,7 @@
 """
 IRC terminal client class
 Matthew Russell
-last updated feb 28, 2015
+last updated mar 2, 2015
 
 class instances the IRC bot
 listens for terminal input
@@ -37,20 +37,14 @@ class IRCClient(): # IRC terminal client class
 				if cmd == "quit":
 					self.bot.quit(" ".join(options))
 					self.loop = False
-				elif cmd == "this":
-					server = self.bot.servKey
-					if(server == None):
-						server = "None"
-						channel = "None"
-					else:
-						channel = self.bot.getServ().chanKey
-						if(channel == None):
-							channel = "None"
-
-					print("@[%s %s]" % (server, channel))
+				elif cmd == "this" or cmd == "context":
+					print("@[%s %s]" % (self.bot.getServKey(), self.bot.getServ().getChanKey()))
+				elif cmd == "help" or cmd == "h":
+					#TODO
+					print("Help is on the way!")
 				else: # it's a server message
 					self.bot.termCmd(cmd, options)
 			else: # else send message to server
 				self.bot.termMsg(msg)		
 		except Exception as e:
-			print("[ERROR] terminal Parser failed: %s" % (e))
+			print("[ERROR]: %s" % (e))
