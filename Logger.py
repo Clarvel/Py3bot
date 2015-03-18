@@ -2,14 +2,17 @@
 Logger handles saving messages to the logs and writing to terminal
 
 Matthew Russell
-mar 2, 2015
+mar 18, 2015
 """
 #system import
 import time, os, errno
 
 class Logger:
 
-	def __init__(self, filename):
+	def __init__(self, filename, terminalPrepend = None):
+		self.terPre = ""
+		if(terminalPrepend != None):
+			self.terPre = "[%s]" % terminalPrepend
 		self.path = os.path.join(os.path.dirname(__file__), "logs/%s" % (filename))
 		try:
 			folders = filename.split("/")
@@ -36,12 +39,12 @@ class Logger:
 
 	def error(self, message):
 		self.write("[ERROR] " + message)
-		print("[ERROR] %s" % (message))
+		print("%s[ERROR] %s" % (self.terPre, message))
 
 	def info(self, message):
 		self.write("[INFO] " + message)
-		print("[INFO] %s" % (message))
+		print("%s[INFO] %s" % (self.terPre, message))
 
 	def log(self, message):
 		self.write(message)
-		print("%s" % (message))
+		print("%s%s" % (self.terPre, message))

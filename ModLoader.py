@@ -1,7 +1,7 @@
 """
 imports all mods indicated in IRCBot/settings.py and sets up an array of their names
 Matthew Russell
-Mar 2, 2015
+Mar 18, 2015
 """
 #system imports
 import sys, importlib
@@ -16,7 +16,9 @@ class ModLoader():
 			#make path name
 			try:
 				# from mods.Default.Default import Default
-				baseMod = __import__("mods.%s.%s" % (modName, modName), globals(), locals(), [modName], -1)
+				baseMod = importlib.import_module("mods.%s.%s" % (modName, modName))
+				print(baseMod)
+				#baseMod = __import__("mods.%s.%s" % (modName, modName), globals(), locals(), [modName], -1)
 			except ImportError as error:
 				print("Import of mod '%s' failed: %s" % (modName, error))
 			else:
@@ -28,19 +30,21 @@ class ModLoader():
 		#search through the mods to find the relevant command, if found return that string
 		for mod in self.loadedMods:
 			try:
-				reply = mod[command](sender, message)
-			except Exception as e:
-				#TODO: verify only mod[command] not existing
+				reply = getattr(mod, command)(sender, message)
+			except AttributeError as e:
+				#command didn't exist for this mod, ignore error
 				pass
 			else:
 				return reply
-		return "BAD COMMAND"
+		return "Command [%s] not found!" % (command)
 
 
 	def modsList(self): # return loaded mods list
 		return self.loadedMods.keys()
 
-
+class default():
+	def __init__(self):
+		pass
 
 
 

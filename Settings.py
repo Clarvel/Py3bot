@@ -5,6 +5,7 @@ SETTINGS = {
 			"HOST" : "irc.darklordpotter.net",
 			"PORT" : 6667,
 			"PASSWORD" : None,
+			"ONLOGINCMDS" : [],
 			"CHANLIST" : {
 				"test" : {"NAME" : "#test", "PASSWORD" : "", "LOG" : True, "BANNEDMODS" : None},
 				"coup" : {"NAME" : "#coup", "PASSWORD" : "", "LOG" : True, "BANNEDMODS" : None}

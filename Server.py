@@ -1,7 +1,7 @@
 """
 IRC server class
 Matthew Russell
-last updated Mar 2, 2015
+last updated Mar 18, 2015
 
 class handles communication between the IRC bot and the connected server
 
@@ -14,6 +14,7 @@ import threading
 import Regexes
 import time
 from Logger import Logger
+from Channel import Channel
 
 class Server():
 	"""
@@ -28,33 +29,27 @@ class Server():
 	nick(name)									sends nick rename message
 	performAction(string)						performs action on string input
 	"""
-	def __init__(self, bot, nickName):
-		self.bot = bot
+	def __init__(self, host, port, nickName = None, serverPrepend = "", password = None, quitMessage = ""):
+		self.host = host
 		self.name = nickName
+		self.servPre = serverPrepend
+		self.quitMsg = quitMessage
 		self.chanList = {}
 		self.chanKey = None
+		self.chanIDList = {}
+		self.pmIDList = {}
 		self.closed = True
 
 		self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		self.logger = Logger("")
 
-	def connect(self, host, port, ID, password = None): # connect to server
-		if(not self.closed):
-			self.logger.error("Server already connected")
-			return False
+		self.logger = Logger("%s/%s" % (host, host), serverPrepend)
 
-		serv_addr = (host, port)
-		self.ID = ID
-		self.logger = Logger("servers/%s/%s" % (host, host))
 		try:
-			self.connection.connect(serv_addr)
+			self.connection.connect((host, port))
 		except Exception as e:
 			self.logger.error("Connection to host %s failed: %s" % (host, str(e)))
-			return False
 		else:
-			self.closed = False
-			self.host = host
-			self.logger.info('Connected to %s:%d' % (serv_addr))
+			self.logger.info('Connecting to %s:%d' % (host, port))
 
 			if password != None:
 				self.sendData("PASS %s" % (password))
@@ -62,9 +57,9 @@ class Server():
 			self.sendData("USER %s %s * :%s" % (self.name, socket.gethostname(), self.name))
 			self.sendData("NICK %s" % (self.name))
 
-			self.listenThread = threading.Thread(target=self.listen) # spawn listening thread
-			self.listenThread.daemon = True # ensure thread dies when main thread dies
-			self.listenThread.start() # start listening thread
+			listenThread = threading.Thread(target=self.listen) # spawn listening thread
+			listenThread.daemon = True # ensure thread dies when main thread dies
+			listenThread.start() # start listening thread
 
 			# wait for ping before continuing, otherwise timeout and fail
 			self.pinged = False
@@ -74,39 +69,55 @@ class Server():
 				timer += 1
 				if timer >= 30:
 					self.logger.error("Connection to host %s failed: Did not receive ping after %is" % (host, timer))
-					return False
-			return True
+					return
+			self.closed = False
 
-	def close(self, message = ""):
+	def stop(self, message = None):
 		#closes with optional message
+		if message == None:
+			message = self.quitMsg
+		for channel in self.chanList.keys(): # log quit messages
+			self.chanList[channel].logger.info("QUIT %s" % (message))
+		for pmKey in self.pmIDList.keys(): # log quit messages
+			self.pmIDList[pmKey].logger.info("QUIT %s" % (message))
+		self.logger.log("QUIT %s" % (message))
 		self.sendData("QUIT %s" % (message))
 		self.closed = True
 
 
-	def channel(self, name, chanID = None, password = ""):
-		if(chanID == None):
-			chanID = name
-		#joins channel
-		self.sendData("JOIN %s %s" % (name, password))
-		self.chanKey = chanID
-		self.chanList[chanID] = name
+	def newChannel(self, name, channelID = None, password = "", bannedMods = None):
+		if(channelID == None):
+			channelID = name
 
-	def swapChan(self, chanID):
-		if chanID in self.chanList.keys():
-			self.chanKey = chanID
+		# make new channel class
+		newChan = Channel(name, self.host, "%s %s" % (self.servPre, channelID), bannedMods)
+
+		#commands to join channel
+		self.sendData("JOIN %s %s" % (name, password))
+		self.chanKey = channelID
+		self.chanList[channelID] = newChan
+		self.chanIDList[name] = newChan
+
+	def swapChannel(self, channelID):
+		if channelID in self.chanList.keys():
+			self.chanKey = channelID
 			print("Setting active Channel to %s" % (self.chanKey))
 		else:
-			self.logger.error("Bad channel key: %s" % (chanID))
+			self.logger.error("Bad channel key: %s" % (channelID))
 
-	def closeChan(self, chanID = None):
+	def closeChannel(self, channelID = None, msg = None):
 		# leaves channel
-		if chanID == None:
-			chanID = self.chanKey
-		if chanID in self.chanList.keys():
-			self.sendData("PART %s" % (self.chanList[chanID]))
-			del self.chanList[chanID]
+		if channelID == None:
+			channelID = self.chanKey
+		if channelID in self.chanList.keys():
+			if(msg != None):
+				self.sendData("PART %s %s" % (self.chanList[channelID].getName(), msg))
+			else:
+				self.sendData("PART %s" % (self.chanList[channelID].getName()))				
+			del self.chanIDList[self.chanList[channelID].getName()]
+			del self.chanList[channelID]
 
-			if(chanID == self.chanKey):
+			if(channelID == self.chanKey):
 				if(len(self.chanList.keys()) == 0):
 					self.chanKey = None
 					print("No other connected channels available")
@@ -114,19 +125,34 @@ class Server():
 					self.chanKey = list(self.chanList.keys())[0]
 					print("Setting active Channel to %s" % (self.chanKey))
 		else:
-			self.logger.error("Bad channel key: %s" % (chanID))
+			self.logger.error("Bad channel key: %s" % (channelID))
 
-	def getChan(self): # return current channel string
-		if(self.chanKey == None):
+	def getChannel(self, channelID = None): # return channel object by its ID or default
+		if(channelID == None):
+			channelID = self.chanKey
+		if(channelID == None):
 			raise Exception("No connected Channels for this Server")
-		return self.chanList[self.chanKey]
+		return self.chanList[channelID]
 
-	def getChanKey(self): # return current channel key
+	
+	def getPrivateName(self, name): # return channel object by its channel name or find PM
+		try:
+			private = self.chanIDList[name] # check channels for the channel
+		except Exception as e:#channel not found, make new PM as nw channel
+			print("[_PM_] %s" % e) # else make new PM, I shouldnt be receiving extraneous channel PMs
+			tmp = Channel(name, self.host, "%s %s" % (self.servPre, name), None)
+			self.chanIDList[name] = tmp
+			private = tmp
+		return private
+
+	def getChannelKey(self): # return current channel key
 		if(self.chanKey == None):
 			return "None"
 		return self.chanKey
 
-	def listen(self):
+
+	def listen(self): # listen to connection, spawn thread to handle message once input received
+		self.closed = False
 		while not self.closed: # while connection isn't closed
 			try:
 				chunk = self.connection.recv(4096).decode('UTF-8').rstrip() # receive input
@@ -147,49 +173,63 @@ class Server():
 
 	def parseInput(self, chunk): # Perform some action based on the command fed to the bot
 		#print(chunk)
-		strList = chunk.split("\n")
+		strList = chunk.split("\n") # separate by line
 		for string in strList:
-			string = string.rstrip() # remove unwanted junk from end
+			string = string.rstrip() # remove unwanted junk from end of string
+			#print(string)
 			msg = Regexes.REMatch(string)
-			if   msg.match(Regexes.PING):
+			if   msg.match(Regexes.PING): # string matched ping
 				self.pinged = True
-				self.sendData("PONG %s" % (msg.group(1).strip()))
-			elif msg.match(Regexes.PMSG):
-				if   msg.group(5).startswith(self.bot.alertChar): # bot alert command
-					options = msg.group(5).split() # split at whitespace
-					cmd = options.pop(0) # split off command
-					cmd = cmd.split(self.bot.alertChar, 1)[1] # remove bot cmd char
-					self.bot.botMsg(self.ID, self.getChanKey(), msg.group(1), cmd, options)
+				self.sendData("PONG %s" % (msg.group(1)))
+			elif msg.match(Regexes.USER): # string matched user message
+				smsg = Regexes.REMatch(msg.group(4))
+				if   smsg.match(Regexes.PMSG): # submessage matched private message
+					ssmsg = Regexes.REMatch(smsg.group(2))
+					if ssmsg.match(Regexes.ACTN): # subsubmessage matched action
+						chan = self.getPrivateName(smsg.group(1)) # find appropriate channel
+						chan.msg("*%s %s" % (msg.group(1), ssmsg.group(1)))
+					else: # it's a private/channel message
+						if(smsg.group(1) != self.name): # if target is not me
+							chan = self.getPrivateName(smsg.group(1)) # find appropriate channel
+						else:
+							chan = self.getPrivateName(msg.group(1))
+						chan.msg("%s: %s" % (msg.group(1), smsg.group(2)))
+				elif smsg.match(Regexes.JOIN):
+					chan = self.getPrivateName(smsg.group(1)) # find appropriate channel
+					chan.msg("%s joined %s" % (msg.group(1), smsg.group(1)))
+				elif smsg.match(Regexes.NICK):
+					self.logger.info("%s is now known as %s" % (msg.group(1), smsg.group(1)))
+					#TODO for all channels and pms containing this nick, change their values
+				elif smsg.match(Regexes.QUIT):
+					self.logger.info("%s quit: %s" % (msg.group(1), smsg.group(1)))
+					# TODO propagate this thru all relevant channels
+				elif smsg.match(Regexes.PART):
+					chan = self.getPrivateName(smsg.group(1))
+					chan.msg("%s left: %s" % (msg.group(1), smsg.group(2)))
+				elif smsg.match(Regexes.MODE):
+					chan = self.getPrivateName(smsg.group(1))
+					chan.msg("%s set mode %s %s" % (msg.group(1), smsg.group(2), smsg.group(3)))
+				elif smsg.match(Regexes.NTCE):
+					chan = self.getPrivateName(smsg.group(1))
+					chan.msg("Notice from %s: %s" % (msg.group(1), smsg.group(2)))
 				else:
-					args = Regexes.REMatch(msg.group(5))
-					if   args.match(Regexes.ACTN):
-						self.logger.log("[%s %s]* %s %s" % (self.ID, msg.group(4), msg.group(1), args.group(1)))
-					else:
-						self.logger.log("[%s %s %s] %s" % (self.ID, msg.group(4), msg.group(1), msg.group(5)))
-			elif msg.match(Regexes.SMSG):
-				args = Regexes.REMatch(msg.group(1))
-				if   args.match(Regexes.SJON):
-					self.logger.info("[SERV_JOIN] %s" % msg.group(2))
-				elif args.match(Regexes.SPRM):
-					args2 = Regexes.REMatch(args.group(2))
-					if   args2.match(Regexes.SMAT):
-						self.logger.info("[CHANNAMES] %s" % msg.group(2))
-					elif args2.match(Regexes.SMCH):
-						self.logger.info("[CHANNEL %s] %s" % (args2.group(1), msg.group(2)))
-					else:
-						self.logger.info("[SERV_PM] [%s] %s" % (msg.group(1), msg.group(2)))
+					print("[ ERR ][UNKNOWN USER STRING]%s" % string)
+			elif msg.match(Regexes.SERV): # string matched server message
+				smsg = Regexes.REMatch(msg.group(4))
+				if   smsg.match(Regexes.SNTC): # server authentication notices
+					self.logger.info("NOTICE AUTH %s" % (smsg.group(1)))
+					#
+				elif smsg.match(Regexes.SMOD): # server mode set
+					self.logger.info("MODE %s" % (smsg.group(1)))
+					#
+				elif smsg.match(Regexes.NREP): # string matched numeric reply
+					#self.logger.info("[%s] %s" % (smsg.group(1), smsg.group(2)))
+					self.numReply(int(smsg.group(1)), smsg.group(2))
 				else:
-					self.logger.info("[SERV_MSG] %s" % ( msg.group(2)))
-			elif msg.match(Regexes.NTCE):
-				self.logger.log("[NOTICE][%s] %s" % (msg.group(1), msg.group(2)))
-			elif msg.match(Regexes.MODE):
-				self.logger.info("Mode: %s" % (msg.group(3)))
-			elif msg.match(Regexes.JOIN):
-				self.logger.info("%s joined channel %s on %s" % (msg.group(1), msg.group(3), self.ID))
-			elif msg.match(Regexes.QUIT):
-				self.logger.info("[QUIT %s] %s" % (self.ID, msg.group(3)))
+					print("[ ERR ][UNKNOWN SERVER STRING]" % string)
 			else:
-				self.logger.info("[###]%s" % string)
+				print("[ ERR ][UNKNOWN STRING]%s" % string)
+
 
 	def sendData(self, msg):
 		#Send msg over the connection socket to server
@@ -201,31 +241,30 @@ class Server():
 		except Exception as e:
 			self.logger.error("Could not send data: %s" % e)
 
-	def sendMsg(self, msg, channel = None): # send message to channel specified or to current channel otherwise
-		if(channel == None): # default to current channel if no chan specified
-			channel = self.getChan() # get channel value
+	def sendMsg(self, msg, receiver = None): # send message to channel specified or to current channel otherwise
+		if(receiver == None): # default to current channel if no chan specified
+			receiver = self.getChannel().getName() # get channel value
 		# send data to channel
-		self.sendData("PRIVMSG %s :%s" % (channel, msg))
+		self.getPrivateName(receiver).log("%s: %s" % (self.name, msg)) # log message through channel class
+		self.sendData("PRIVMSG %s %s" % (receiver, msg))
 
-	def sendPM(self, msg, receiver = None): # send message to person specified, or to server otherwise
-		# send data to person
-		if(receiver == None):
-			self.sendData(msg)
-		else:
-			self.sendData("PRIVMSG %s :%s" % (receiver, msg))
-
-	def nick(self, name):
+	def nick(self, name): # change given nickname
 		# set nickname for bot
 		self.sendData(":%s NICK %s" % (self.name, name))
 		self.name = name
 
-	def termCmd(self, cmd, options):
+
+	def clientCommand(self, cmd, options): # command received from client
 		if   cmd == "join" or cmd =="c" or cmd == "channel":
-			self.channel(*options)
+			self.newChannel(*options)
 		elif cmd == "setch"	or cmd == "sc":
-			self.swapChan(*options)
+			self.swapChannel(*options)
 		elif cmd == "part":
-			self.closeChan(*options)
+			channel = options.pop(0)
+			msg = None
+			if(len(options) > 0):
+				msg = " ".join(options)
+			self.closeChannel(channel, msg)
 		else:
 			# send message to current server
 			optStr = " ".join(options) # preconcat message
@@ -242,28 +281,26 @@ class Server():
 			elif cmd == "oper": 
 				self.sendData("OPER %s" % optStr)
 			elif cmd == "mode":
-				self.sendData("MODE %s %s" % (self.getChan(), optStr))
+				self.sendData("MODE %s %s" % (self.getChannel(), optStr))
 			elif cmd == "topic" or cmd == "t":
 				if(len(options) == 0):
-					self.sendData("TOPIC %s" % (self.getChan()))
+					self.sendData("TOPIC %s" % (self.getChannel()))
 				else:
-					self.sendData("TOPIC %s :%s" % (self.getChan(), optStr))
+					self.sendData("TOPIC %s :%s" % (self.getChannel(), optStr))
 			elif cmd == "names":
-				self.sendData("NAMES %s" % (self.getChan()))
+				self.sendData("NAMES %s" % (self.getChannel()))
 			elif cmd == "nick":
 				if(len(options) == 0):
 					print("Nickname: [%s]" % self.name)
 				else:
 					self.nick(optStr)
-			elif cmd == "list":
-				self.sendData("LIST")
 			elif cmd == "invite" or cmd == "inv" or cmd == "i":
 				if(len(options) > 1):
 					self.sendData("INVITE %s" % (optStr)) # assume channel specified
 				else:
-					self.sendData("INVITE %s %s" % (optStr, self.getChan()))
+					self.sendData("INVITE %s %s" % (optStr, self.getChannel()))
 			elif cmd == "kick" or cmd == "k":
-				self.sendData("KICK %s %s :%s" % (self.getChan(), options.pop(0), " ".join(options)))
+				self.sendData("KICK %s %s :%s" % (self.getChannel(), options.pop(0), " ".join(options)))
 			elif cmd == "whois":
 				self.sendData("WHOIS %s" % (optStr))
 			elif cmd == "whowas":
@@ -272,3 +309,38 @@ class Server():
 				self.sendData("KILL %s" % (optStr))
 			else:
 				raise Exception("Bad command: [%s]" % cmd)
+
+	def numReply(self, num, reply): # numeric replies
+		msg = Regexes.REMatch(reply)
+		if num <= 0:
+			raise Exception("ERROR: Bad Numeric Reply [%i]" % num)
+		elif num < 4 or num == 251 or num == 255 or num == 375 or num == 372 or num == 376: # server messages
+			msg.match(Regexes.SMSG) # match to general server message
+			self.logger.log(msg.group(1))
+		elif num == 252:
+			msg.match(Regexes.OMSG) # match to operator server message
+			self.logger.log("%s %s" % (msg.group(1), msg.group(2)))
+		elif num == 254:
+			msg.match(Regexes.CMSG) # match to channels server message
+			self.logger.log("%s %s" % (msg.group(1), msg.group(2)))
+		elif num == 265:
+			msg.match(Regexes.LMSG) # match to local users server message
+			self.logger.log(msg.group(3))
+		elif num == 266:
+			msg.match(Regexes.GMSG) # match to global users server message
+			self.logger.log(msg.group(3))
+		elif num == 353:
+			msg.match(Regexes.NAMS) # match to names list
+			self.getPrivateName(msg.group(2)).log("USERS: %s" % msg.group(3))
+		elif num == 366: #end of names list
+			#msg.match(Regexes.ENNL)
+			pass
+		elif num == 332: # topic
+			msg.match(Regexes.TMSG)
+			self.getPrivateName(msg.group(1)).log("USERS: %s" % msg.group(2))
+		elif num == 333: # creator
+			#msg.match(Regexes.CREA)
+			pass
+		else: # unknown reply
+			print("[ UNK ] [%s] %s" % (num, reply))
+

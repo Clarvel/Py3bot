@@ -1,135 +1,128 @@
 """
 IRC bot class
 Matthew Russell
-last updated Mar 2 2015
+last updated Mar 5 2015
 
 class handles the bot's functions
-maintains list of active servers, default nickname, and command alert char
+maintains list of active servers, default nickname
 loads settings from Settings.py
 handles and/or passes terminal input
 """
 from Server import Server
 from Settings import SETTINGS
 from Logger import Logger
-#import ModLoader
 
 class Bot():
 	def __init__(self):		
 		self.servList = {} # list of servers connected to
 		self.servKey = None # current server index
 		self.nickName = "PyBot"
-		self.alertChar = '!'
 
 		self.logger = Logger("BOT_ERRORS")
-		#self.modLoader = ModLoader()
 
 		self.loadSettings()
 
-	def quit(self, msg = ""): # close all servers
+	def quit(self, msg = None): # close all servers
 		self.saveSettings()
-		
-		for servID in self.servList.keys():
-			self.servList[servID].close(msg)
 
-	def loadSettings(self):
-		#load settings from file
+		for servID in self.servList.keys():
+			self.servList[servID].stop(msg)
+
+
+	def loadSettings(self): #load settings from file
 		self.nickName = SETTINGS["NAME"]
-		self.mods = SETTINGS["MODS"]
-		self.alertChar = SETTINGS["ALERTCHAR"]
-		#self.modLoader.load(SETTINGS["MODS"])
 
 		# load servers
 		for key in SETTINGS["SERVLIST"].keys():
 			serv = SETTINGS["SERVLIST"][key]
 			# connect to server and add to list
-			self.server(serv["HOST"], serv["PORT"], key, serv["PASSWORD"])
-			# set to current server
-			self.servKey = key
+			self.newServer(serv["HOST"], serv["PORT"], key, serv["PASSWORD"], serv["QUITMSG"])
+
+			for line in serv["ONLOGINCMDS"]: # execute listed commands on login
+				options = line.split()
+				cmd = options.pop(0)
+				self.clientCommand(cmd, options)
 
 			# load channels for server
+			server = self.getServer()
 			for chanKey in SETTINGS["SERVLIST"][key]["CHANLIST"].keys():
 				chan = serv["CHANLIST"][chanKey]
 				# tell server to connect to channel
-				self.servList[self.servKey].channel(chan["NAME"], chanKey, chan["PASSWORD"])
-				self.servList[self.servKey].chanKey = chanKey
+				server.newChannel(chan["NAME"], chanKey, chan["PASSWORD"])
 
 	def saveSettings(self):
 		#TODO
 		pass
 
-	def server(self, host, port, ServerID = None, password = None): # connect to a server and set to current
+
+	def newServer(self, host, port, ServerID = None, password = None, quitMessage = ""): # connect to a server and set to current
 		if ServerID == None:
 			ServerID = "%s.%i" % (host, int(port))
 		# make new server
-		newServer = Server(self, self.nickName)
+		newServ = Server(host, int(port), self.nickName, ServerID, password, quitMessage)
 		# connect server to host
-		connected = newServer.connect(host, int(port), ServerID, password)
-		if(connected):
+		if(not newServ.closed): # if successful
 			# add server to list
-			self.servList[ServerID] = newServer
+			self.servList[ServerID] = newServ
 			# set to active server
 			self.servKey = ServerID
 		else:
 			self.logger.error("Could not connect to server at [%s:%i]" % (host, int(port)))
 
-	def swapServ(self, servID): # swap current server if valid action
-		if servID in self.servList:
-			self.servKey = servID
+	def swapServer(self, serverID): # swap current server if valid action
+		if serverID in self.servList:
+			self.servKey = serverID
 		else:
-			self.logger.error("Bad server key: [%s]" % (servID))
+			self.logger.error("Bad server key: [%s]" % (serverID))
 
-	def closeServ(self, servID = None, msg = None): # close server connection
-		if servID == None:
-			servID = self.servKey
-		if servID in self.servList:
-			self.servList[servID].close(msg) # tell server to close connection
-			del self.servList[servID] # remove server from list
+	def closeServer(self, serverID = None, msg = None): # close server connection
+		if serverID == None: # set to default if ID not given
+			serverID = self.servKey
+		if serverID in self.servList: # if server exists
+			self.servList[serverID].stop(msg) # tell server to close connection
+			del self.servList[serverID] # remove server from list
 
-			if(servID == self.servKey): # if server key is current server, swap to active one
+			if(serverID == self.servKey): # if server key is current server, swap to active one
 				if(len(self.servList.keys()) == 0): # if there are no connected servers
 					self.servKey = None
 					print("No other connected servers available")
 				else:
-					self.servKey = list(self.servList.keys())[0]
+					self.servKey = list(self.servList.keys())[0] # get 0-index of server key list
 					print("Setting active Server to %s" % (self.servKey))
 		else:
-			self.logger.error("Bad server key: [%s]" % (servID))
+			self.logger.error("Bad server key: [%s]" % (serverID))
 
-	def getServ(self): # return current serverobject
-		if(self.servKey == None):
-			raise Exception("No connected Servers! Please connect to a server before continuing: /server host  port")
-		return self.servList[self.servKey]
+	def getServer(self, serverID = None): # return server object, default if not specified
+		if(serverID == None): # if no server specified, use default
+			serverID = self.servKey
+		if(serverID == None): # if server doesn't exist, raise exception
+			raise Exception("No connected Servers! Please connect to a server before continuing: /server host port")
+		return self.servList[serverID] # return server from list
 
-	def getServKey(self): # return current server key
+	def getServerKey(self): # return current server key
 		if(self.servKey == None):
 			return "None"
 		return self.servKey
 
-	def botMsg(self, server, channel, sender, cmd, args): # call mods through this?
-		#TODO with modLoader
-		reply = self.modLoader.callMod(sender, cmd, args)
-		self.servList[server].sendMsg(reply, channel)
-
 	# pass forwards :---------------------------------------------
 
-	def termMsg(self, msg): # check for bot message, else pass message to default server & chan
-		if(msg.startswith(self.alertChar)): # if message is a bot command
-			options = msg.split() # split at whitespace
-			cmd = options.pop(0) # split off command
-			cmd = cmd.split(self.alertChar, 1)[1] # remove bot cmd char
-			self.botMsg(self.getServKey(), self.getServ().getChanKey(), self.nickName, cmd, options)
-		else:
-			self.getServ().sendMsg(msg)
+	def clientMessage(self, msg): # pass message to default server & chan
+		#
+		self.getServer().sendMsg(msg)
 
-	def termCmd(self, cmd, options): # terminal command input
+	def clientCommand(self, cmd, options): # terminal command input
 		if   cmd == "server" or cmd == "s": 
-			self.server(*options)
+			self.newServer(*options)
 		elif cmd == "setse" or cmd == "ss":
-			self.swapServ(*options)
+			self.swapServer(*options)
 		elif cmd == "close":
-			self.closeServ(*options)
+			server = options.pop(0)
+			msg = None
+			if(len(options) > 0):
+				msg = " ".join(options)
+			self.closeServer(server, msg)
 		else: # else pass to current server
-			self.getServ().termCmd(cmd, options)
+			self.getServer().clientCommand(cmd, options)
 
 
 
