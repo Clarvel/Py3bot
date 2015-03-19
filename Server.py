@@ -78,9 +78,9 @@ class Server():
 		if message == None:
 			message = self.quitMsg
 		for channel in self.chanList.keys(): # log quit messages
-			self.chanList[channel].logger.info("QUIT %s" % (message))
+			self.chanList[channel].log("QUIT %s" % (message))
 		for pmKey in self.pmIDList.keys(): # log quit messages
-			self.pmIDList[pmKey].logger.info("QUIT %s" % (message))
+			self.pmIDList[pmKey].log("QUIT %s" % (message))
 		self.logger.log("QUIT %s" % (message))
 		self.sendData("QUIT %s" % (message))
 		self.closed = True
