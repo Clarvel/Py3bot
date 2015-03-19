@@ -48,7 +48,7 @@ class Bot():
 			for chanKey in SETTINGS["SERVLIST"][key]["CHANLIST"].keys():
 				chan = serv["CHANLIST"][chanKey]
 				# tell server to connect to channel
-				server.newChannel(chan["NAME"], chanKey, chan["PASSWORD"])
+				server.newChannel(chan["NAME"], chanKey, chan["PASSWORD"], chan["LOG"], chan["BANNEDMODS"])
 
 	def saveSettings(self):
 		#TODO
@@ -67,13 +67,13 @@ class Bot():
 			# set to active server
 			self.servKey = ServerID
 		else:
-			self.logger.error("Could not connect to server at [%s:%i]" % (host, int(port)))
+			return self.logger.error("Could not connect to server at [%s:%i]" % (host, int(port)))
 
 	def swapServer(self, serverID): # swap current server if valid action
 		if serverID in self.servList:
 			self.servKey = serverID
 		else:
-			self.logger.error("Bad server key: [%s]" % (serverID))
+			return self.logger.error("Bad server key: [%s]" % (serverID))
 
 	def closeServer(self, serverID = None, msg = None): # close server connection
 		if serverID == None: # set to default if ID not given
@@ -85,12 +85,12 @@ class Bot():
 			if(serverID == self.servKey): # if server key is current server, swap to active one
 				if(len(self.servList.keys()) == 0): # if there are no connected servers
 					self.servKey = None
-					print("No other connected servers available")
+					return("No other connected servers available")
 				else:
 					self.servKey = list(self.servList.keys())[0] # get 0-index of server key list
-					print("Setting active Server to %s" % (self.servKey))
+					return("Setting active Server to %s" % (self.servKey))
 		else:
-			self.logger.error("Bad server key: [%s]" % (serverID))
+			return self.logger.error("Bad server key: [%s]" % (serverID))
 
 	def getServer(self, serverID = None): # return server object, default if not specified
 		if(serverID == None): # if no server specified, use default
@@ -112,17 +112,17 @@ class Bot():
 
 	def clientCommand(self, cmd, options): # terminal command input
 		if   cmd == "server" or cmd == "s": 
-			self.newServer(*options)
+			return self.newServer(*options)
 		elif cmd == "setse" or cmd == "ss":
-			self.swapServer(*options)
+			return self.swapServer(*options)
 		elif cmd == "close":
 			server = options.pop(0)
 			msg = None
 			if(len(options) > 0):
 				msg = " ".join(options)
-			self.closeServer(server, msg)
+			return self.closeServer(server, msg)
 		else: # else pass to current server
-			self.getServer().clientCommand(cmd, options)
+			return self.getServer().clientCommand(cmd, options)
 
 
 

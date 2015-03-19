@@ -46,7 +46,9 @@ class IRCClient(): # IRC terminal client class
 					#TODO
 					print("Help is on the way!")
 				else: # it's a server message
-					self.bot.clientCommand(cmd, options)
+					tMsg = self.bot.clientCommand(cmd, options)
+					if tMsg != None and tMsg != "None":
+						print(tMsg)
 			else: # else send message to server
 				self.bot.clientMessage(msg)		
 		except Exception as e:

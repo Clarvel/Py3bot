@@ -25,6 +25,7 @@ QUIT = re.compile(r'QUIT :(.*)') # (msg) user quit message
 PART = re.compile(r'PART (\S+) ?:?(.*)') # (chan)(msg) user left channel
 MODE = re.compile(r'MODE (\S+) (\S+) (\S+)') # (chan)(arg)(recp) set mode for person
 NTCE = re.compile(r'NOTICE (\S+) :(\S+)') # (recp)(msg) notice message
+INVT = re.compile(r'INVITE \S+ :(\S+)') # invite message (channel)
 
 
 SERV = re.compile(r':((\S+\.\S+\.\S+)|(\S+)) (.+)') # server message (server)(###)

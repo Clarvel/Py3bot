@@ -7,14 +7,15 @@ SETTINGS = {
 			"PASSWORD" : None,
 			"ONLOGINCMDS" : [],
 			"CHANLIST" : {
-				"test" : {"NAME" : "#test", "PASSWORD" : "", "LOG" : True, "BANNEDMODS" : None},
-				"coup" : {"NAME" : "#coup", "PASSWORD" : "", "LOG" : True, "BANNEDMODS" : None}
+				"games" : {"NAME" : "#games", "PASSWORD" : "", "LOG" : False, "BANNEDMODS" : ["Default"]},
+				"prog" : {"NAME" : "#programming", "PASSWORD" : "", "LOG" : True, "BANNEDMODS" : ["Dice"]}
 			},
-			"QUITMSG" : "Derp Derpington",
+			"QUITMSG" : "Bye",
 			"NICKS" : ["Pybubbles", "PI", "PY", "Py3bot"]
 		}
 	},
 	"NAME" : "Py3bot",
-	"MODS" : ["Default"],
+	"MODS" : ["Dice"],
+	"ADMIN_PASSWORD" : None,
 	"ALERTCHAR" : "@"
 }

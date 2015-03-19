@@ -15,6 +15,7 @@ import Regexes
 import time
 from Logger import Logger
 from Channel import Channel
+from Settings import SETTINGS
 
 class Server():
 	"""
@@ -29,7 +30,7 @@ class Server():
 	nick(name)									sends nick rename message
 	performAction(string)						performs action on string input
 	"""
-	def __init__(self, host, port, nickName = None, serverPrepend = "", password = None, quitMessage = ""):
+	def __init__(self, host, port, nickName, serverPrepend = "", password = None, quitMessage = ""):
 		self.host = host
 		self.name = nickName
 		self.servPre = serverPrepend
@@ -85,12 +86,12 @@ class Server():
 		self.closed = True
 
 
-	def newChannel(self, name, channelID = None, password = "", bannedMods = None):
+	def newChannel(self, name, channelID = None, password = "", log = True, bannedMods = None):
 		if(channelID == None):
 			channelID = name
 
 		# make new channel class
-		newChan = Channel(name, self.host, "%s %s" % (self.servPre, channelID), bannedMods)
+		newChan = Channel(name, self.host, self.sendMsg, "%s %s" % (self.servPre, channelID), log, bannedMods)
 
 		#commands to join channel
 		self.sendData("JOIN %s %s" % (name, password))
@@ -140,7 +141,7 @@ class Server():
 			private = self.chanIDList[name] # check channels for the channel
 		except Exception as e:#channel not found, make new PM as nw channel
 			print("[_PM_] %s" % e) # else make new PM, I shouldnt be receiving extraneous channel PMs
-			tmp = Channel(name, self.host, "%s %s" % (self.servPre, name), None)
+			tmp = Channel(name, self.host, self.sendMsg, "%s %s" % (self.servPre, name), True, None)
 			self.chanIDList[name] = tmp
 			private = tmp
 		return private
@@ -187,16 +188,46 @@ class Server():
 					ssmsg = Regexes.REMatch(smsg.group(2))
 					if ssmsg.match(Regexes.ACTN): # subsubmessage matched action
 						chan = self.getPrivateName(smsg.group(1)) # find appropriate channel
-						chan.msg("*%s %s" % (msg.group(1), ssmsg.group(1)))
+						if self.name in smsg.group(2): # if mentioned
+							return chan.mtn(msg.group(1), smsg.group(2))
+						else:
+							return chan.act(msg.group(1), ssmsg.group(1))
 					else: # it's a private/channel message
 						if(smsg.group(1) != self.name): # if target is not me
 							chan = self.getPrivateName(smsg.group(1)) # find appropriate channel
-						else:
+						else: # target is me, its a PM
 							chan = self.getPrivateName(msg.group(1))
-						chan.msg("%s: %s" % (msg.group(1), smsg.group(2)))
+							if self.loginAdmin(msg.group(1), "%s@%s" % (msg.group(2), msg.group(3)), smsg.group(2)): # test if admin command
+								return # if successfully logged in admin, stop parsing
+						
+						reply = None
+						try: # try to find command, if not found continue as normal
+							if self.admin != None and self.admin == ("%s@%s" % (msg.group(2), msg.group(3))): # admin said something
+								options = smsg.group(2).split()
+								cmd = options.pop(0)
+								reply = self.clientCommand(cmd, options)
+							else:
+								raise Exception("not Admin")
+						except Exception as e:
+							#do nothing
+							pass
+						else: # if task found and completed, send msg and stop parsing
+							if reply != None:
+								chan.log("%s: %s" % (msg.group(1), smsg.group(2)))
+								replies = reply.split("\n")
+								for reply in replies:
+									self.sendMsg(reply, chan.name)
+							else:
+								self.sendMsg("It is done", chan.name)
+							return
+
+						if self.name in smsg.group(2): # if mentioned
+							return chan.mtn(msg.group(1), smsg.group(2))
+						else:
+							return chan.msg(msg.group(1), smsg.group(2))
 				elif smsg.match(Regexes.JOIN):
 					chan = self.getPrivateName(smsg.group(1)) # find appropriate channel
-					chan.msg("%s joined %s" % (msg.group(1), smsg.group(1)))
+					return chan.log("%s joined %s" % (msg.group(1), smsg.group(1))) # TODO
 				elif smsg.match(Regexes.NICK):
 					self.logger.info("%s is now known as %s" % (msg.group(1), smsg.group(1)))
 					#TODO for all channels and pms containing this nick, change their values
@@ -205,15 +236,17 @@ class Server():
 					# TODO propagate this thru all relevant channels
 				elif smsg.match(Regexes.PART):
 					chan = self.getPrivateName(smsg.group(1))
-					chan.msg("%s left: %s" % (msg.group(1), smsg.group(2)))
+					return chan.log("%s left: %s" % (msg.group(1), smsg.group(2))) # TODO
 				elif smsg.match(Regexes.MODE):
 					chan = self.getPrivateName(smsg.group(1))
-					chan.msg("%s set mode %s %s" % (msg.group(1), smsg.group(2), smsg.group(3)))
+					return chan.log("%s set mode %s %s" % (msg.group(1), smsg.group(2), smsg.group(3)))
 				elif smsg.match(Regexes.NTCE):
 					chan = self.getPrivateName(smsg.group(1))
-					chan.msg("Notice from %s: %s" % (msg.group(1), smsg.group(2)))
+					return chan.log("Notice from %s: %s" % (msg.group(1), smsg.group(2))) # TODO
+				elif smsg.match(Regexes.INVT):
+					chan = self.newChannel(smsg.group(1)) # join new channel
 				else:
-					print("[ ERR ][UNKNOWN USER STRING]%s" % string)
+					return("[ ERR ][UNKNOWN USER STRING]%s" % string)
 			elif msg.match(Regexes.SERV): # string matched server message
 				smsg = Regexes.REMatch(msg.group(4))
 				if   smsg.match(Regexes.SNTC): # server authentication notices
@@ -226,9 +259,9 @@ class Server():
 					#self.logger.info("[%s] %s" % (smsg.group(1), smsg.group(2)))
 					self.numReply(int(smsg.group(1)), smsg.group(2))
 				else:
-					print("[ ERR ][UNKNOWN SERVER STRING]" % string)
+					return("[ ERR ][UNKNOWN SERVER STRING]" % string)
 			else:
-				print("[ ERR ][UNKNOWN STRING]%s" % string)
+				return("[ ERR ][UNKNOWN STRING]%s" % string)
 
 
 	def sendData(self, msg):
@@ -239,76 +272,80 @@ class Server():
 			if sent == 0:
 				raise RuntimeError("Socket Connection Broken")
 		except Exception as e:
-			self.logger.error("Could not send data: %s" % e)
+			return self.logger.error("Could not send data: %s" % e)
 
 	def sendMsg(self, msg, receiver = None): # send message to channel specified or to current channel otherwise
 		if(receiver == None): # default to current channel if no chan specified
 			receiver = self.getChannel().getName() # get channel value
 		# send data to channel
 		self.getPrivateName(receiver).log("%s: %s" % (self.name, msg)) # log message through channel class
-		self.sendData("PRIVMSG %s %s" % (receiver, msg))
+		return self.sendData("PRIVMSG %s %s" % (receiver, msg))
 
 	def nick(self, name): # change given nickname
 		# set nickname for bot
-		self.sendData(":%s NICK %s" % (self.name, name))
-		self.name = name
+		try:
+			a = self.sendData(":%s NICK %s" % (self.name, name))
+		except Exception as e:
+			return a
+		else:
+			self.name = name
 
 
 	def clientCommand(self, cmd, options): # command received from client
 		if   cmd == "join" or cmd =="c" or cmd == "channel":
-			self.newChannel(*options)
+			return self.newChannel(*options)
 		elif cmd == "setch"	or cmd == "sc":
-			self.swapChannel(*options)
+			return self.swapChannel(*options)
 		elif cmd == "part":
 			channel = options.pop(0)
 			msg = None
 			if(len(options) > 0):
 				msg = " ".join(options)
-			self.closeChannel(channel, msg)
+			return self.closeChannel(channel, msg)
 		else:
 			# send message to current server
 			optStr = " ".join(options) # preconcat message
 
 			if   cmd == "pm":
-				self.sendData("PRIVMSG %s" % (optStr))
+				return self.sendData("PRIVMSG %s" % (optStr))
 			elif cmd == "notice" or cmd == "n":
-				self.sendData("NOTICE %s" % (optStr))
+				return self.sendData("NOTICE %s" % (optStr))
 			elif cmd == "reply" or cmd == "r":
 				pass # TODO
-				self.sendData("%s" % (optStr))
+				return self.sendData("%s" % (optStr))
 			elif cmd == "me":
-				self.sendMsg("\x01" + "ACTION %s\x01" % (optStr))
+				return self.sendMsg("\x01" + "ACTION %s\x01" % (optStr))
 			elif cmd == "oper": 
-				self.sendData("OPER %s" % optStr)
+				return self.sendData("OPER %s" % optStr)
 			elif cmd == "mode":
-				self.sendData("MODE %s %s" % (self.getChannel(), optStr))
+				return self.sendData("MODE %s %s" % (self.getChannel(), optStr))
 			elif cmd == "topic" or cmd == "t":
 				if(len(options) == 0):
-					self.sendData("TOPIC %s" % (self.getChannel()))
+					return self.sendData("TOPIC %s" % (self.getChannel()))
 				else:
-					self.sendData("TOPIC %s :%s" % (self.getChannel(), optStr))
+					return self.sendData("TOPIC %s :%s" % (self.getChannel(), optStr))
 			elif cmd == "names":
-				self.sendData("NAMES %s" % (self.getChannel()))
+				return self.sendData("NAMES %s" % (self.getChannel()))
 			elif cmd == "nick":
 				if(len(options) == 0):
-					print("Nickname: [%s]" % self.name)
+					return("Nickname: [%s]" % self.name)
 				else:
-					self.nick(optStr)
+					return self.nick(optStr)
 			elif cmd == "invite" or cmd == "inv" or cmd == "i":
 				if(len(options) > 1):
-					self.sendData("INVITE %s" % (optStr)) # assume channel specified
+					return self.sendData("INVITE %s" % (optStr)) # assume channel specified
 				else:
-					self.sendData("INVITE %s %s" % (optStr, self.getChannel()))
+					return self.sendData("INVITE %s %s" % (optStr, self.getChannel()))
 			elif cmd == "kick" or cmd == "k":
-				self.sendData("KICK %s %s :%s" % (self.getChannel(), options.pop(0), " ".join(options)))
+				return self.sendData("KICK %s %s :%s" % (self.getChannel(), options.pop(0), " ".join(options)))
 			elif cmd == "whois":
-				self.sendData("WHOIS %s" % (optStr))
+				return self.sendData("WHOIS %s" % (optStr))
 			elif cmd == "whowas":
-				self.sendData("WHOWAS %s" % (optStr))
+				return self.sendData("WHOWAS %s" % (optStr))
 			elif cmd == "kill":
-				self.sendData("KILL %s" % (optStr))
+				return self.sendData("KILL %s" % (optStr))
 			else:
-				raise Exception("Bad command: [%s]" % cmd)
+				return self.getChannel().clientCommand(cmd, options)
 
 	def numReply(self, num, reply): # numeric replies
 		msg = Regexes.REMatch(reply)
@@ -343,4 +380,16 @@ class Server():
 			pass
 		else: # unknown reply
 			print("[ UNK ] [%s] %s" % (num, reply))
+
+	def loginAdmin(self, sender, IP, message):
+		message = message.split()
+		try:
+			if message[0] == "ADMIN" and message[1] == SETTINGS["ADMIN_PASSWORD"] and SETTINGS["ADMIN_PASSWORD"] != "":
+				self.admin = IP
+				self.getPrivateName(sender).log("%s: %s" % (sender, " ".join(message)))
+				self.sendMsg("Hello, Master", sender)
+				return True
+		except Exception as e:
+			return False
+		return False
 
