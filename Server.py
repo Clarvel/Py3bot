@@ -374,7 +374,7 @@ class Server():
 			pass
 		elif num == 332: # topic
 			msg.match(Regexes.TMSG)
-			self.getPrivateName(msg.group(1)).log("USERS: %s" % msg.group(2))
+			self.getPrivateName(msg.group(1)).log("TOPIC: %s" % msg.group(2))
 		elif num == 333: # creator
 			#msg.match(Regexes.CREA)
 			pass
@@ -384,7 +384,7 @@ class Server():
 	def loginAdmin(self, sender, IP, message):
 		message = message.split()
 		try:
-			if message[0] == "ADMIN" and message[1] == SETTINGS["ADMIN_PASSWORD"] and SETTINGS["ADMIN_PASSWORD"] != "":
+			if message[0] == "ADMIN" and message[1] == SETTINGS["ADMIN_PASSWORD"] and SETTINGS["ADMIN_PASSWORD"] != "" and SETTINGS["ADMIN_PASSWORD"] != None:
 				self.admin = IP
 				self.getPrivateName(sender).log("%s: %s" % (sender, " ".join(message)))
 				self.sendMsg("Hello, Master", sender)

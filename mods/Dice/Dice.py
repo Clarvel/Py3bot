@@ -44,7 +44,7 @@ class Dice():
 			#reply with randomized integers
 			return reply + "]"
 		else:
-			return limits()
+			return self.limits()
 
 	def limits(self):
 		return "Numbers must be between: (" + str(self.MINROLLS) + ":" + str(self.MAXROLLS) + ") d (" + str(self.MINSIDES) + ":" + str(self.MAXSIDES) + ")"

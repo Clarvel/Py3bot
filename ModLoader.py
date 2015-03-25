@@ -65,8 +65,6 @@ class ModLoader():
 			except Exception as e:
 				print(e)
 				#command didn't exist for this mod, ignore error
-			else:
-				return reply
 		return "Command [%s] not found!" % (command)
 
 	def mentMod(self, sender, message): # bot was mentioned in a message
