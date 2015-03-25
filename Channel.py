@@ -20,7 +20,7 @@ class Channel():
 		if(logit):
 			self.logger = Logger("%s/%s" % (host, name), prepend)
 
-		self.mods = ModLoader(self.name, self.msgCallback)
+		self.mods = ModLoader(self.name, self.chanCallback)
 		modsList = []
 		if bannedMods == None:
 			modsList = SETTINGS["MODS"]
@@ -30,6 +30,11 @@ class Channel():
 					modsList.append(mod)
 
 		print(self.mods.load(modsList))
+
+	def chanCallback(self, message, channel = None): # sets default channel to this, not to server's current channel
+		if channel == None:
+			channel = self.name
+		self.msgCallback(message, channel)
 
 	def msg(self, sender, message): # channel message received
 		self.log("%s: %s" % (sender, message))
