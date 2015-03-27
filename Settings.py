@@ -9,14 +9,14 @@ SETTINGS = {
 			"CHANLIST" : {
 				#"games" : {"NAME" : "#games", "PASSWORD" : "", "LOG" : False, "BANNEDMODS" : ["Default"]},
 				#"prog" : {"NAME" : "#programming", "PASSWORD" : "", "LOG" : True, "BANNEDMODS" : ["Dice"]}
-				"test" : {"NAME" : "#test", "PASSWORD" : "", "LOG" : True, "BANNEDMODS" : []}
+				"test" : {"NAME" : "#test", "PASSWORD" : "", "LOG" : True, "BANNEDMODS" : ["Test"]}
 			},
 			"QUITMSG" : "Bye",
 			"NICKS" : ["Pybubbles", "PI", "PY", "Py3bot"]
 		}
 	},
 	"NAME" : "Py3bot",
-	"MODS" : ["Dice", "Test"],
+	"MODS" : ["Dice", "Test", "CAH"],
 	"ADMIN_PASSWORD" : None,
 	"ALERTCHAR" : "@"
 }

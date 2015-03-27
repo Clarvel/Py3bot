@@ -182,6 +182,7 @@ class Server():
 			if   msg.match(Regexes.PING): # string matched ping
 				self.pinged = True
 				self.sendData("PONG %s" % (msg.group(1)))
+				print("PINGED: %s" % msg.group(1))
 			elif msg.match(Regexes.USER): # string matched user message
 				smsg = Regexes.REMatch(msg.group(4))
 				if   smsg.match(Regexes.PMSG): # submessage matched private message
