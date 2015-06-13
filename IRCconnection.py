@@ -22,6 +22,7 @@ class IRCConnection():
 		self._nickNameCallback = nickCB
 		self._parseCallback = parseCB
 		self._buffer = ""
+		self._pingTestInterval = 29
 		self._connectTimeout = 30
 		self._reconnectTimeout = 300
 		self._connected = False
@@ -45,15 +46,9 @@ class IRCConnection():
 		listenThread.daemon = True # ensure thread dies when main dies
 		listenThread.start()
 
-		# wait for ping before continuing, otherwise timeout and fail
-		timer = 0
-		while not self._pinged:
-			timer += 1
-			time.sleep(1)
-			if timer >= self._connectTimeout:
-				self.disconnect()
-				raise IRCIOError("Did not receive ping after %is" % (timer), 
-					self.host)
+		pingThread = threading.Thread(target=self._pingTest)
+		pingThread.daemon = True # ensure thread dies when main dies
+		pingThread.start()
 
 	def disconnect(self):
 		if(self._connected):
@@ -109,6 +104,18 @@ class IRCConnection():
 		if not self._connection.send(bytes("%s\r\n" % (data), 'UTF-8')):
 			self.reconnect()
 			self.sendData(data)
+
+	def _pingTest(self):
+		while self._connected:
+			# wait for ping before continuing, otherwise timeout and fail
+			timer = 0
+			while not self._pinged and self._connected:
+				timer += self._pingTestInterval
+				time.sleep(self._pingTestInterval)
+				if timer >= self._connectTimeout:
+					self.reconnect()
+					#raise IRCIOError("Did not receive ping after %is" % (timer), self.host)
+			self._pinged = False
 
 
 if __name__ == '__main__':
