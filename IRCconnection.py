@@ -8,6 +8,11 @@ from IRCerror import IRCError
 
 PING = re.compile(r':?PING(.*)')
 
+class IRCIOError(IRCError):
+	def __init__(self, value, host):
+		self.value = "Connection to %s failed: %s" % (host, value)
+
+
 class IRCConnection():
 	def __init__(self, host, port, nickCB, parseCB, password = None):
 		self.host = host
@@ -47,7 +52,8 @@ class IRCConnection():
 			time.sleep(1)
 			if timer >= self._connectTimeout:
 				self.disconnect()
-				raise IRCError("Connection to host %s failed: Did not receive ping after %is" % (self.host, timer))
+				raise IRCIOError("Did not receive ping after %is" % (timer), 
+					self.host)
 
 	def disconnect(self):
 		if(self._connected):
@@ -57,6 +63,7 @@ class IRCConnection():
 			self._buffer = ""
 			self._connected = False
 			self._pinged = False
+			self._thread = None
 
 	def reconnect(self):
 		self.disconnect()
@@ -70,15 +77,18 @@ class IRCConnection():
 				pass
 			else:
 				return
-		raise IRCError("Failed to reconnect after %ds" % (timer/60))
+		raise IRCIOError("Failed to reconnect after %ds" % (timer/60), 
+			self.host)
 
 	def listen(self):
 		while self._connected:
 			try:
 				self._buffer += self._connection.recv(4096).decode('UTF-8')
 			except IOError as e:
-				self.reconnect()
-				print("[ERROR]: Connection to host failed: %s" % (str(e)))
+				print("[IRC]: Connection to host failed: %s. Retrying..." % (str(e)))
+				reconnectThread = threading.Thread(target=self.reconnect)
+				reconnectThread.daemon = True
+				reconnectThread.start()
 			else:
 				lines = self._buffer.split("\n")
 				self._buffer = lines.pop()
@@ -97,9 +107,8 @@ class IRCConnection():
 
 	def sendData(self, data):
 		if not self._connection.send(bytes("%s\r\n" % (data), 'UTF-8')):
-			self.disconnect()
-			raise IRCError("Socket Connection Broken")
-
+			self.reconnect()
+			self.sendData(data)
 
 
 if __name__ == '__main__':
