@@ -13,6 +13,8 @@ import socket
 import threading
 import Regexes
 import time
+
+from IRCconnection import IRCConnection
 from Logger import Logger
 from Channel import Channel
 from Settings import SETTINGS
@@ -32,8 +34,10 @@ class Server():
 	"""
 	def __init__(self, host, port, nickName, serverPrepend = "", password = None, quitMessage = ""):
 		self.host = host
+		self.port = port
 		self.name = nickName
 		self.servPre = serverPrepend
+		self.password = password
 		self.quitMsg = quitMessage
 		self.chanList = {}
 		self.chanKey = None
@@ -41,37 +45,20 @@ class Server():
 		self.pmIDList = {}
 		self.closed = True
 
-		self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.connection = IRCConnection(self.host, self.port, self.nick, self.parseInput)	
 
-		self.logger = Logger("%s/%s" % (host, host), serverPrepend)
+		self.logger = Logger("%s/%s" % (self.host, self.host), serverPrepend)
+		self.connect()
 
+	def connect(self):
 		try:
-			self.connection.connect((host, port))
+			self.connection.connect()
 		except Exception as e:
-			self.logger.error("Connection to host %s failed: %s" % (host, str(e)))
+			self.logger.error("Connection to host %s failed: %s" % (self.host, str(e)))
 		else:
-			self.logger.info('Connecting to %s:%d' % (host, port))
-
-			if password != None:
-				self.sendData("PASS %s" % (password))
-
-			self.sendData("USER %s %s * :%s" % (self.name, socket.gethostname(), self.name))
-			self.sendData("NICK %s" % (self.name))
-
-			listenThread = threading.Thread(target=self.listen) # spawn listening thread
-			listenThread.daemon = True # ensure thread dies when main thread dies
-			listenThread.start() # start listening thread
-
-			# wait for ping before continuing, otherwise timeout and fail
-			self.pinged = False
-			timer = 0
-			while not self.pinged:
-				time.sleep(1)
-				timer += 1
-				if timer >= 30:
-					self.logger.error("Connection to host %s failed: Did not receive ping after %is" % (host, timer))
-					return
+			self.logger.info('Connected to %s:%d' % (self.host, self.port))
 			self.closed = False
+
 
 	def stop(self, message = None):
 		#closes with optional message
@@ -82,9 +69,7 @@ class Server():
 		for pmKey in self.pmIDList.keys(): # log quit messages
 			self.pmIDList[pmKey].log("QUIT %s" % (message))
 		self.logger.log("QUIT %s" % (message))
-		self.sendData("QUIT %s" % (message))
-		self.closed = True
-
+		self.connection.disconnect()
 
 	def newChannel(self, name, channelID = None, password = "", log = True, bannedMods = None):
 		if(channelID == None):
@@ -150,27 +135,6 @@ class Server():
 		if(self.chanKey == None):
 			return "None"
 		return self.chanKey
-
-
-	def listen(self): # listen to connection, spawn thread to handle message once input received
-		self.closed = False
-		while not self.closed: # while connection isn't closed
-			try:
-				chunk = self.connection.recv(4096).decode('UTF-8').rstrip() # receive input
-			except Exception as e:
-				self.logger.error("Connection to host failed: %s" % (str(e)))
-				self.closed = True
-				return
-			else:
-				#self.logger.log("[RESP] %s" % chunk)
-				if(chunk == ""): # if no data received, bad connection, stop listening
-					self.logger.error("No data received, closing connection")
-					self.closed = True
-				else:
-					# otherwise spawn off thread to handle message
-					parseThread = threading.Thread(target=self.parseInput, args=(chunk,))
-					parseThread.daemon = True
-					parseThread.start()
 
 	def parseInput(self, chunk): # Perform some action based on the command fed to the bot
 		#print(chunk)
@@ -269,9 +233,7 @@ class Server():
 		#Send msg over the connection socket to server
 		try:
 			#print(msg)
-			sent = self.connection.send(bytes("%s\r\n" % (msg), 'UTF-8'))
-			if sent == 0:
-				raise RuntimeError("Socket Connection Broken")
+			sent = self.connection.sendData(msg)
 		except Exception as e:
 			return self.logger.error("Could not send data: %s" % e)
 
@@ -282,7 +244,9 @@ class Server():
 		self.getPrivateName(receiver).log("%s: %s" % (self.name, msg)) # log message through channel class
 		return self.sendData("PRIVMSG %s %s" % (receiver, msg))
 
-	def nick(self, name): # change given nickname
+	def nick(self, name = None): # change given nickname
+		if(not name):
+			return self.name
 		# set nickname for bot
 		try:
 			a = self.sendData(":%s NICK %s" % (self.name, name))
@@ -381,6 +345,7 @@ class Server():
 			pass
 		else: # unknown reply
 			print("[ UNK ] [%s] %s" % (num, reply))
+
 
 	def loginAdmin(self, sender, IP, message):
 		message = message.split()
