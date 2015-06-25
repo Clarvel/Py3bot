@@ -117,7 +117,7 @@ def _eval(node):
 	elif isinstance(node, ast.UnaryOp):
 		return BINOPS[type(node.op)](_eval(node.operand))
 	elif isinstance(node, ast.Name):
-		raise RollError("Unsupported variable name")
+		raise RollError("variable names aren't supported")
 	elif isinstance(node, ast.Call):
 		raise RollError("expressions only dude, wtf")
 	else:
