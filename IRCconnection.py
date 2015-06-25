@@ -1,36 +1,42 @@
+"""
+IRC connection class
+Matthew Russell
+last updated June 25, 2015
 
+handles connecting, reconnecting, disconnecting, data I/O, and silently pings
+
+"""
 import socket
 import time
 import threading
 import re
 
-from IRCerror import IRCError
+from IRCerrors import IRCIOError
 
-PING = re.compile(r':?PING(.*)')
-
-class IRCIOError(IRCError):
-	def __init__(self, value, host):
-		self.value = "Connection to %s failed: %s" % (host, value)
-
+PING = re.compile(r':?PING ?(.*)')
 
 class IRCConnection():
 	def __init__(self, host, port, nickCB, parseCB, password = None):
 		self.host = host
 		self.port = port
 		self.password = password
-		self.quitMessage = ""
 		self._nickNameCallback = nickCB
 		self._parseCallback = parseCB
 		self._buffer = ""
-		self._pingTestInterval = 29
-		self._connectTimeout = 30
 		self._reconnectTimeout = 300
 		self._connected = False
-		self._pinged = False
+		self._connection = None
 
-		self._connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self._listenThread = threading.Thread(target=self._listen)
+		self._listenThread.daemon = True # ensure thread dies when main dies
+
+		self._parseThread = threading.Thread(target=self._parse)
+		self._parseThread.daemon = True
+
+		self._listenEvent = threading.Event()
 
 	def connect(self):
+		self._connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self._connection.connect((self.host, self.port))
 		self._connected = True
 
@@ -42,80 +48,90 @@ class IRCConnection():
 			nickName))
 		self.sendData("NICK %s" % nickName)
 
-		listenThread = threading.Thread(target=self.listen)
-		listenThread.daemon = True # ensure thread dies when main dies
-		listenThread.start()
+		self._listenEvent.clear()
 
-		pingThread = threading.Thread(target=self._pingTest)
-		pingThread.daemon = True # ensure thread dies when main dies
-		pingThread.start()
+		if not self._listenThread.isAlive():
+			self._listenThread.start()
 
-	def disconnect(self):
+		if not self._parseThread.isAlive():
+			self._parseThread.start()
+
+		return "%s:%d" % (self.host, self.port)
+
+	def disconnect(self, quitMessage = ""):
 		if(self._connected):
-			self.sendData("QUIT %s" % (self.quitMessage))
+			try:
+				self.sendData("QUIT :%s" % (quitMessage))
+			except Exception as e:
+				pass
+			self._connected = False
 			self._connection.shutdown(socket.SHUT_RDWR)
 			self._connection.close()
 			self._buffer = ""
-			self._connected = False
-			self._pinged = False
-			self._thread = None
+			self._listenEvent.set()
 
 	def reconnect(self):
 		self.disconnect()
-		timer = 0
-		while(timer < self._reconnectTimeout):
-			timer += 30
-			time.sleep(timer)
+		connectException = ""
+		for timer in range(5, self._reconnectTimeout, 15):
+			print("Reconnecting...")
 			try:
-				self.connect()
+				successVal = self.connect()
 			except Exception as e:
-				pass
+				connectException = ": %s" % (e)
 			else:
-				return
-		raise IRCIOError("Failed to reconnect after %ds" % (timer/60), 
-			self.host)
+				return successVal
+			time.sleep(timer)
 
-	def listen(self):
+		raise IRCIOError("Failed to reconnect after %d%s" % (timer/60, 
+			connectException), self.host)
+
+	def _listen(self):
 		while self._connected:
 			try:
-				self._buffer += self._connection.recv(4096).decode('UTF-8')
+				self._buffer = self._connection.recv(4096).decode('UTF-8')
 			except IOError as e:
-				print("[IRC]: Connection to host failed: %s. Retrying..." % (str(e)))
-				reconnectThread = threading.Thread(target=self.reconnect)
-				reconnectThread.daemon = True
-				reconnectThread.start()
+				print("G%s" % e.__name__)
+				if self._connected:
+					print("[IRC Connection]: Connection to host failed: %s. Retrying..." % (str(e)))
+					try:
+						self.reconnect()
+					except Exception as e:
+						print("[IRC Connection]: reconnect failed: %s" % e)
 			else:
-				lines = self._buffer.split("\n")
-				self._buffer = lines.pop()
-				for line in lines:
-					line = line.rstrip("\r")
+				self._listenEvent.set()
 
-					test = PING.match(line)
-					if(bool(test)):
-						self.sendData("PONG %s" % (test.group(0)))
-						self._pinged = True
-					else:
-						parseThread = threading.Thread(
-							target=self._parseCallback, args=(line,))
-						parseThread.daemon = True
-						parseThread.start()
+	def _parse(self):
+		while self._listenEvent.wait() and self._connected:
+			self._listenEvent.clear()
+			lines = self._buffer.split("\n")
+			self._buffer = lines.pop()
+			for line in lines:
+				line = line.rstrip("\r")
+
+				test = PING.match(line)
+				if(test):
+					self.sendData("PONG %s" % (test.group(1)))
+					#print("PONG %s" % (test.group(1)))
+				else:
+					self._parseCallback(line)
 
 	def sendData(self, data):
-		if not self._connection.send(bytes("%s\r\n" % (data), 'UTF-8')):
-			self.reconnect()
-			self.sendData(data)
-
-	def _pingTest(self):
-		while self._connected:
-			# wait for ping before continuing, otherwise timeout and fail
-			timer = 0
-			while not self._pinged and self._connected:
-				timer += self._pingTestInterval
-				time.sleep(self._pingTestInterval)
-				if timer >= self._connectTimeout:
+		#print("SENDING: %s" % data)
+		if self._connected:
+			if not self._connection.send(bytes("%s\r\n" % (data), 'UTF-8')):
+				#print(data)
+				print("[IRCConnection]: Data send failed. Retrying...")
+				try:
 					self.reconnect()
-					#raise IRCIOError("Did not receive ping after %is" % (timer), self.host)
-			self._pinged = False
+				except Exception as e:
+					print("[IRCCOnnection]: reconnect failed: %s" % e)
+				else:
+					self.sendData(data)
+
+	def isConnected(self):
+		"""returns true if server is connected"""
+		return self._connected
 
 
 if __name__ == '__main__':

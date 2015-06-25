@@ -1,129 +1,55 @@
-# Py3bot
-IRC bot written for Python3
-Bot can be used as an IRC client throguh the terminal.
-Bot dynamically loads mods for each channel its in
-Easily configurable settings
-Comes pre-packeaged with a Dice mod
+#Py3bot
+##IRC bot written in Python3
+>Bot can be used as an IRC client through the terminal.
+>Bot loads modes for each server instance
 
-run using "python3 __init__.py"
-requires python 3.3.2 or later.
-Bot loads the settings in Settings.py on startup.
+>Easily configurable settings
 
-TERMINAL COMMANDS:
-/quit
-	terminates bot
+>run using: `python3 py3bot.py`
 
-/this
-	print current context in [server, channel] format
+>**requires python 3.4 or later.**
 
+>Bot loads the settings in settings.py on startup.
 
-/server (host, port, ID?, password?)
-/s (host, port, ID?, password?)
-	connects to specified server
-	
-/setSe (ID)
-/ss (ID)
-	swap current server to server stored with the indicated ID
-	
-/close (ID, msg?)
-	close specified server
+##TERMINAL COMMANDS:
+In addition to all normal IRC commands, the following commands are also available in the terminal:
+>`/quit(message?)`
+>>terminates bot
 
-/join (name, ID?, password?)
-/c (name, ID?, password?)
-	connects to specified channel
+>`/this` 
+>>print current context in [server, channel] format
 
-/setCh (ID)
-/sc (ID)
-	swaps current channel to channel stored with the indicated ID
-	
-/part (ID)
-	close specified channel
+>`/server (host, port, terminalID?, password?)`
 
+>`/s (host, port, terminalID?, password?)`
+>>connects to specified server	
 
-/oper (name, password)
-	request operator privleges
-	
-/mode (OP, name, msg?)
-	where OP = ((+|-)|o|p|s|i|t|n|b|v|w|m|l|k)
-	change user modes
+>`/swapServer (ID)`
+>
+>`/ss (ID)`
+>>swap current server to server stored with the indicated ID	
 
-/topic (msg?)
-	sets topic for channel
-	if topic not given, prints the current topic
-	
-/names 
-	lists all nicknames for specified channel
-	
-/nick (newName)
-	changes the bot's nickname to the given nickname
-	
-/list
-	lists channels and topics
-	
-/invite (name, channel?)
-	invite a user to a channel
-	if channel not specified, invites to active channel
-	
-/kick (name, reason?)
-	removes person from channel
+>`/closeSever (ID, msg?)`
+>>close specified server
 
+>`/swapCurrentReceiver (ID)`
+>>swaps current channel to channel stored with the indicated ID
 
-/pm (name, msg)
-	send message to person
-	
-/notice (name, msg)
-	send message to person
-
-/whois (name)
-	get info on name
-	
-/whowas (name)
-	get info on name
-
-/kill (name, msg?)
-	disconnect someone's ghost
-	
-	
-/load (mod)
-  loads specified mod in active context
+>`/load (mod)`
+>>loads specified mod in active context
   
-/reload (mod)
-  reloads specified mod in active context
+>`/reload (mod)`
+>>reloads specified mod in active context
   
-/stop (mod)
-  removes specified mod in active context
+>`/stop (mod)`
+>>removes specified mod in active context
   
-/loaded
-/mods
-  prints currently loaded mods in active context
-  
-  
-  
-MODS:
-mods are initialized per channel, and take the following format:
-in /mods/MODNAME/MODNAME.py:
+>`/modsList`
+>>prints currently loaded mods in active context
 
-class MODNAME():
-  def __init__(self, callback):
-    self.reply = callback
-  def COMMAND(self, sender, channel, cmd, message):
-    # command was given, this should do nothing if cmd does not match any recognized commands for this mod
-    if cmd == "cmdReply":
-      self.reply("Replying to command here", channel)
-  def MENTION(self, sender, channel, message):
-    # the bot was mentioned by name, this should do nothing if cmd does not match any recognized commands for this mod
-    pass
+#Mods
+Mods are stored in the folder `mods/MODNAME/`. Once the server receives the command to load a specific mod, the file `mod.py` in said folder is imported and the class `MODNAME` is instantiated. This class needs to inherit from the `IRCMod` class, imported from `IRCmod` to have access to the full range of possible command and reply options. A detailed list of these commands and replies are available in the file `IRCmod.py`
 
-You do not have to include COMMAND or MENTION if not used for your mod.
-Replace MODNAME with the name of your module.
-callbacks require two inputs, the message and the recipient. The recipient can be a channel or a user of the server. 
+Mods are not inherently loaded on startup or upon connecting to a server unless the command to load the mods is added to the `ONLOGINCMDS` setting in `settings.py`
 
-
-ADMIN:
-NOTE: enabling this is NOT SAFE in any way, leaving ADMIN_PASSWORD as None will disable this
-ENABLE AT OWN RISK
-
-In settings.py, you may set an admin password in the ADMIN_PASSWORD field.
-This setting will, once set and the bot is running will allow you to PM the bot with "ADMIN PASS" where PASS is the password setup beforehand.
-Once set, the bot will execute any terminal commands at the server level you and only you give it.(/join and below in the list above)
-It tracks Admin privleges by IP, and currently doesn't revoke privleges on disconnect, so be aware of this when your connection is spotty.
+>A very basic default mod and a Dice mod are already included as examples.
