@@ -23,7 +23,7 @@ class IRCServerModable(IRCServerCommands):
 		for modName in modsList:
 			try:
 				# example call: from mods.Default.Default import Default
-				baseMod = importlib.import_module("mods.%s.%s" % (modName, modName))
+				baseMod = importlib.import_module("mods.%s.mod" % (modName))
 				#sys.path.append("/".join([sys.path[0], "mods", modName]))
 				#baseMod = importlib.import_module(modName)
 				mod = getattr(baseMod, modName)(self)
