@@ -12,7 +12,7 @@ from logger import Logger
 from IRCerrors import IRCServerError
 from IRCconnection import IRCConnection
 from IRCreceivers import IRCChannel, IRCClient, IRCReceiver
-from settings import CHANNEL_PREFIXES
+from settings import CHANNEL_PREFIXES, MESSAGE_LENGTH_LIMIT
 
 class IRCServer():
 	"""
@@ -64,10 +64,28 @@ class IRCServer():
 	#-------------------------------------------------------------------------
 
 	def sendData(self, data):
+		"""sends raw data strings to the server connection"""
 		try:
 			self._connection.sendData(data.rstrip())
 		except Exception as e:
 			self.logE("Data send failed: %s" % e)
+
+	def sendCmd(self, command, meta=None, message=None):
+		"""
+		sends command with optional meta data and message
+		will split messages to ensure they're under the maximum length
+		"""
+		if meta:
+			command = "%s %s" % (command, meta)
+		if message:
+			strLim = MESSAGE_LENGTH_LIMIT - (len(command) + 2)
+			a=0
+			for a in range(strLim, len(message), strLim):
+				self.sendData("%s :%s" % (command, message[a-strLim:a]))
+			if a != len(message)-1:
+				self.sendData("%s :%s" % (command, message[a:len(message)]))
+		else:
+			self.sendData(command)
 
 	def _parseInput(self, line):
 		"""overloadable function to receive commands from conected server"""
