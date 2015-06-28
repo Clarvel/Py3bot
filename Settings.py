@@ -25,3 +25,4 @@ CHANNEL_SIGILS = {
 	'PRIVATE' : "@",
 	'SECRET' : "*"
 }
+AUTO_INVITE = True

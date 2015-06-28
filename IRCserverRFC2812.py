@@ -13,7 +13,7 @@ import threading
 
 from IRCerrors import IRCServerError
 from IRCserverModable import IRCServerModable
-from settings import NICKNAME_PREFIXES, ALERTCHAR
+from settings import NICKNAME_PREFIXES, ALERTCHAR, AUTO_INVITE
 from IRCreceivers import IRCReceiver
 
 class IRCServerRFC2812(IRCServerModable):
@@ -77,7 +77,8 @@ class IRCServerRFC2812(IRCServerModable):
 		""" INVITE command. """
 		if(recipient.name == self.getNick()):
 			self.log("%s invited you to %s" % (sender, message))
-			self.join(message)
+			if AUTO_INVITE:
+				self.join(message)
 		else:
 			try:
 				channel = self.getChannel(message)
