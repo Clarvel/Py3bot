@@ -7,6 +7,12 @@ class IRCMod:
 	def __init__(self, server):
 		self.__server = server # server callback function
 	
+	def getHost(self):
+		return self.__server.getHost()
+
+	def getNick(self):
+		return self.__server.getNick()
+
 	# callable functions
 
 	def nick(self, name):
@@ -102,8 +108,6 @@ class IRCMod:
 
 	# overloadable functions
 
-	def onError(self, message):
-		pass
 	def onInvite(self, sender, recipient, message):
 		pass
 	def onJoin(self, sender, channel):
