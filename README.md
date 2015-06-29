@@ -48,7 +48,7 @@ In addition to all normal IRC commands, the following commands are also availabl
 >>prints currently loaded mods in active context
 
 #Mods
-Mods are stored in the folder `mods/MODNAME/`. Once the server receives the command to load a specific mod, the file `mod.py` in said folder is imported and the class `MODNAME` is instantiated. This class needs to inherit from the `IRCMod` class, imported from `IRCmod` to have access to the full range of possible command and reply options. A detailed list of these commands and replies are available in the file `IRCmod.py`
+Mods are stored in the folder `mods/MODNAME/`. Once the server receives the command to load a specific mod, the file `MODNAME.py` in said folder is imported and the class `MODNAME` is instantiated. This class needs to inherit from the `IRCMod` class, imported from `IRCmod` to have access to the full range of possible command and reply options. A detailed list of these commands and replies are available in the file `IRCmod.py`
 
 Mods are not inherently loaded on startup or upon connecting to a server unless the command to load the mods is added to the `ONLOGINCMDS` setting in `settings.py`
 
