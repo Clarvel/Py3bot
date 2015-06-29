@@ -1,7 +1,7 @@
 """
 IRC server class
 Matthew Russell
-last updated June 25, 2015
+last updated June 29, 2015
 
 implements commands to send to server
 https://en.wikipedia.org/wiki/List_of_Internet_Relay_Chat_commands
@@ -26,10 +26,10 @@ class IRCServerCommands(IRCServer):
 		parses commands, shouldn't be called directly from terminal
 		"""
 		try:
-			getattr(self, command)(*options)
+			return getattr(self, command)(*options)
 		except AttributeError as e:
 			if command in self._methods:
-				self._methods[command](*options)
+				return self._methods[command](*options)
 			else:
 				raise IRCServerError("Command not found! %s" % e)
 

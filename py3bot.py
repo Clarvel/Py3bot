@@ -2,7 +2,7 @@
 """
 IRC bot class
 Matthew Russell
-last updated June 25 2015
+last updated June 29 2015
 
 class handles the bot's functions
 maintains list of active servers, default nickname
@@ -163,18 +163,19 @@ class IRCBot():
 #-----------------------------------------------------------------------------
 
 	def _commandParser(self, command, options): # terminal command input
+		response = None
 		try:
-			var = getattr(self, command)(*options)
-			if var: print(var)
+			response = getattr(self, command)(*options)
 		except AttributeError as e:
 			if command in self._methods:
-				var = self._methods[command](*options)
-				if var: print(var)
+				response = self._methods[command](*options)
 			else:
 				try:
-					self._getServer().commandParser(command, options)
+					response = self._getServer().commandParser(command, options)
 				except IRCError as e2:
 					raise IRCBotError("Command not found! [%s] [%s]" % (e, e2))
+		if response: 
+			print(response)
 
 #-----------------------------------------------------------------------------
 
