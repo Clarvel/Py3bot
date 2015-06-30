@@ -1,7 +1,7 @@
 """
 IRC server class
 Matthew Russell
-last updated June 25, 2015
+last updated June 29, 2015
 
 class handles communication between the IRC bot and the connection and 
 variables and fucntions associated with an IRC server
@@ -70,19 +70,22 @@ class IRCServer():
 		except Exception as e:
 			self.logE("Data send failed: %s" % e)
 
-	def sendCmd(self, command, meta=None, message=None):
+	def sendCmd(self, command, meta=None, *message): # TODO limit message length my receiver's full name@host
 		"""
 		sends command with optional meta data and message
 		will split messages to ensure they're under the maximum length
 		"""
 		if meta:
+			if isinstance(meta, list):
+				meta = " ".join(meta)
 			command = "%s %s" % (command, meta)
 		if message:
+			msg = " ".join(message)
 			strLim = MESSAGE_LENGTH_LIMIT - (len(command) + 2)
 			a=0
-			for a in range(strLim, len(message), strLim):
-				self.sendData("%s :%s" % (command, message[a-strLim:a]))
-			self.sendData("%s :%s" % (command, message[a:len(message)]))
+			for a in range(strLim, len(msg), strLim):
+				self.sendData("%s :%s" % (command, msg[a-strLim:a]))
+			self.sendData("%s :%s" % (command, msg[a:len(msg)]))
 		else:
 			self.sendData(command)
 

@@ -12,12 +12,9 @@ SERVERS = {
 	},
 }
 NICKS = ["Py3Bot", "Pybubbles", "PI", "PY", "PyBot"]
-MODS = ["Dice", "Test", "CAH"]
 ALERTCHAR = "@"
-CHANNEL_PREFIXES = ['#', '&']
-MESSAGE_LENGTH_LIMIT = 512
-NICKNAME_LENGTH_LIMIT = 8
-TOPIC_LENGTH_LIMIT = 450
+CHANNEL_PREFIXES = ['#', '&', '+', '!']
+MESSAGE_LENGTH_LIMIT = 510
 NICKNAME_PREFIXES = ['@', '%', '+', '~'] # OP, halfOP, voice, channel owner
 FORBIDDEN_CHARACTERS = { '\r', '\n', '\0' }
 CHANNEL_SIGILS = {

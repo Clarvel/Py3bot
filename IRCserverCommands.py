@@ -18,6 +18,7 @@ class IRCServerCommands(IRCServer):
 			"msg":self.message,
 			"me":self._action,
 			"ignore":self.silence,
+			"privmsg":self.message,
 		}
 	# TODO: find a way to detect message parameter: join message string together
 
@@ -41,11 +42,14 @@ class IRCServerCommands(IRCServer):
 		self.sendCmd("NICK", name)
 
 	def join(self, channel, password=""):
-		""" Join channel, optionally with password. """
+		""" 
+		Join channel, optionally with password. 
+		does not check for already joined if multiple channels/passwords given
+		"""
 		try:
 			receiver = self.getReceiver(channel)
 		except IRCError:
-			self.sendCmd('JOIN', '%s %s' % (channel, password))
+			self.sendCmd('JOIN', [channel, password])
 		else:
 			self.swapCurrentReceiver(receiver)
 
@@ -59,9 +63,9 @@ class IRCServerCommands(IRCServer):
 			try:
 				channel = self.getChannel()
 			except IRCError as e:
-				self.logE("No such channel: %s" % (e))
+				self.logE("No default channel to part from: %s" % (e))
 				return
-		self.sendCmd('PART', channel, " ".join(message))
+		self.sendCmd('PART', channel, message)
 
 	def kick(self, target, channel=None, *reason):
 		""" Kick user from channel. """
@@ -80,7 +84,7 @@ class IRCServerCommands(IRCServer):
 				except IRCError as e:
 					self.logE("Channel not found: %s" % (e))
 					return
-			self.sendCmd('KICK', '%s %s'%(channel, target), " ".join(reason))
+			self.sendCmd('KICK', [channel, target], reason)
 
 	def ban(self, target, channel=None, range=0):
 		"""
@@ -109,25 +113,24 @@ class IRCServerCommands(IRCServer):
 
 	def quit(self, *message):
 		""" Quit network. """
-		self.disconnect(" ".join(message))
+		self.sendCmd("QUIT", None, message)
+
+	def squit(self, server, *message):
+		""" Tell server to disconnect server links"""
+		self.sendCmd("SQUIT", server, message)
 
 	def message(self, target, *message):
 		""" Message channel or user. """
-		try:
-			target = self.getReceiver(target)
-		except IRCError as e:
-			self.logE("No such nick/channel: %s" % (e))
-		else:
-			self.sendCmd("PRIVMSG", target, " ".join(message))
+		self.sendCmd("PRIVMSG", target, message)
 
 	def _message(self, *message):
 		""" Message current channel or user. """
 		try:
 			target = self.getReceiver()
 		except IRCError as e:
-			self.logE("No such nick/channel: %s" % (e))
+			self.logE("No default nick/channel to receive message: %s" % (e))
 		else:
-			self.sendCmd("PRIVMSG", target, " ".join(message))
+			self.message("PRIVMSG", target, message)
 
 	def action(self, target, *message):
 		"""action command, does /me on specified channel"""
@@ -139,7 +142,6 @@ class IRCServerCommands(IRCServer):
 
 	def notice(self, target=None, *message):
 		""" Notice channel or user. """
-		#TODO verify message length here or?
 		try:
 			target = self.getReceiver(target)
 		except IRCError:
@@ -150,29 +152,39 @@ class IRCServerCommands(IRCServer):
 			except IRCError as e:
 				self.logE("No such nick/channel: %s" % (e))
 				return
-		self.sendCmd("NOTICE", target, " ".join(message))
+		self.sendCmd("NOTICE", target, message)
 
-	def mode(self, mode, target=None, channel=None):#TODO
+	def userMode(self, mode):
+		"""set mode on self"""
+		self.sendCmd("MODE", [self.getNick(), mode])
+
+	def mode(self, modeOrChannel, paramsOrMode="", params=""):
 		"""
-		Set mode on target.
-		Users should only rely on the mode actually being changed when receiving an on_{channel,user}_mode_change callback.
+		set mode on self or channel
+		Users should only rely on the mode actually being changed when 
+		receiving an on_{channel,user}_mode_change callback.
+		determine if modeOrChannel is channel
+			if not a channel
+				mode is modeOrChannel
 		"""
+		mode = paramsOrMode
 		try:
-			target = self.getClient(target)
-		except IRCError:
-			target = ""
-		try:
-			channel = self.getChannel(channel)
+			channel = self.getChannel(modeOrChannel)
 		except IRCError as e:
-			self.logE("Channel not found: %s" % (e))
-		else:
-			# TODO ensure proper modes set
-			self.sendCmd('MODE', '%s %s'%(channel, mode), target)
+			mode = modeOrChannel
+			params = paramsOrMode
+			try:
+				channel = self.getChannel()
+			except IRCError as e:
+				self.logE("No default channel to set mode on: %s" % e)
+				return
+		self.sendCmd("MODE", [channel, mode, params])
 
 	def topic(self, channel=None, *topic):
 		"""
 		Set topic on channel.
-		Users should only rely on the topic actually being changed when receiving an on_topic_change callback.
+		Users should only rely on the topic actually being changed when 
+		receiving an on_topic_change callback.
 		"""
 		try:
 			channel = self.getChannel(channel)
@@ -184,56 +196,34 @@ class IRCServerCommands(IRCServer):
 			except IRCError as e:
 				self.logE("No such channel: %s" % (e))
 				return
-		self.sendCmd('TOPIC', channel, " ".join(topic))
+		self.sendCmd('TOPIC', channel, topic)
 
 	def away(self, *message):
 		""" Mark self as away. """
-		self.sendCmd('AWAY', " ".join(message))
+		self.sendCmd('AWAY', None, message)
 
 	def back(self):
 		""" Mark self as not away. """
-		self.sendCmd('AWAY')
+		self.away()
 
-	def whois(self, target):
+	def whois(self, target, serverMask=""):
 		"""
 		Return information about user.
 		"""
-		try:
-			target = self.getClient(target)
-		except IRCError as e:
-			self.logE("No such client: %s" % (e))
-		else:
-			self.sendCmd('WHOIS', target)
+		self.sendCmd('WHOIS', [target, serverMask])
 
-	def whowas(self, target):
+	def whowas(self, target, *params):
 		"""
 		Return information about an offline user.
-		no checking on this because offline users won't be in my data
 		"""
-		self.sendCmd('WHOWAS', target)
+		self.sendCmd('WHOWAS', [target] + params)
 
-	def admin(self):
+	def admin(self, target=""):
 		"""should return server's administrator information"""
-		self.sendCmd('ADMIN')
+		self.sendCmd('ADMIN', target)
 
-	def cnotice(self, target, channel=None, *message):
-		"""send channel notice"""
-		try:
-			target = self.getClient(target)
-		except IRCError as e:
-			self.logE("Client not found: %s" % (e))
-			return
-		try:
-			channel = self.getChannel(channel)
-		except IRCError:
-			message = list(message)
-			message.insert(0, channel)
-			try:
-				channel = self.getChannel()
-			except IRCError as e:
-				self.logE("No default Channel/Client: %s" % (e))
-				return
-		self.sendCmd('CNOTICE', '%s %s'%(channel, target), " ".join(message))
+	def cnotice(self, target, channel=None, *message):#TODO delete from mods
+		pass
 
 	def cprivmsg(self, target, channel = None, *message):
 		"""send pm to target on channel"""
@@ -252,65 +242,89 @@ class IRCServerCommands(IRCServer):
 			except IRCError as e:
 				self.logE("No default Channel/Client: %s" % (e))
 				return
-		self.sendCmd('CPRIVMSG', '%s %s'%(channel, target), " ".join(message))
+		self.sendCmd('CPRIVMSG', [channel, target], message)
 
-	def help(self):
+	def die(self): # todo Mods
+		"""shutdown the server"""
+		self.sendCmd("DIE")
+
+	def info(self, target=""):
 		"""request help from server"""
-		self.sendCmd("HELP")
+		self.sendCmd("INFO", target)
 
-	def info(self):
-		"""request help from server"""
-		self.sendCmd("INFO")
+	def invite(self, nickName, channel): #TODO add to mod
+		"""invites nickName to channel"""
+		self.sendCmd("INVITE", [nickname, channel)]
 
-	def ison(self, *message):
+	def ison(self, *nickNames):
 		"""check nicknames in list are on network"""
-		self.sendCmd("ISON", " ".join(message))
+		self.sendCmd("ISON", nickNames)
 
-	def kill(self, target, *message):#TODO
+	def kill(self, target, *message):
 		"""
 		forcibly removes client from network
 		only for use by IRC ops
 		"""
-		self.sendCmd("KILL", target, " ".join(message))
+		self.sendCmd("KILL", target, message)
 
-	def knock(self, channel, *message):#TODO
+	def knock(self, channel, *message):#TODO mods
 		"""notice to invite only channel with message"""
-		self.sendCmd("KNOCK", channel, " ".join(message))
+		self.sendCmd("KNOCK", channel, message)
 
 	def list(self, *channels):
 		"""
 		lists all channels on server
 		if channels is given, returns channel topics
 		"""
-		self.sendCmd("LIST", ", ".join(channels))
+		self.sendCmd("LIST", ",".join(channels))
 
-	def motd(self):
+	def links(self, remoteServer="", serverMask=""):#TODO add to mods
+		"""lists all servernames known by server"""
+		self.sendCmd("LINKS", [remoteServer, serverMask])
+
+	def lusers(self, mask="", target=""):
+		"""gets stats about size of network"""
+		self.sendCmd("LUSERS", [mask, target])
+
+	def motd(self, server=""):
 		"""returns message of the day"""
-		self.sendCmd("MOTD")
+		self.sendCmd("MOTD", server)
 
 	def names(self, *channels):
 		"""returns list of who's on channels, or all users"""
-		self.sendCmd("NAMES", ", ".join(list(channels)))
+		self.sendCmd("NAMES", ",".join(channels))
 
 	def oper(self, target, password):
 		"""authenticates user with password"""
-		self.sendCmd("OPER", "%s %s" % (target, password))
+		self.sendCmd("OPER", [target, password])
 
 	def ping(self):
 		"""pings server connection"""
 		self.sendCmd("PING", self.getHost())
 
+	def rehash(self):#TODO mods
+		"""admin command to force reread of config"""
+		self.sendCmd("REHASH")
+
+	def restart(self):#TODO mods
+		"""force server to restart itself"""
+		self.sendCmd("RESTART")
+
 	def rules(self):
 		"""returns rules of the server"""
 		self.sendCmd("RULES")
 
-	def servlist(self):
+	def service(self, nickName, distribution, info):
+		""" SERVICE command to register a new service."""
+		self.sendCmd("SERVICE", [nickname, '*', distribution, '0', '0'] info)
+
+	def servlist(self, mask="", type_=""):
 		"""returns services on network"""
-		self.sendCmd("SERVLIST")
+		self.sendCmd("SERVLIST", [mask, type_])
 
 	def squery(self, service, *message):
 		"""sends pm to service"""
-		self.sendCmd("SQUERY", service, " ".join(list(message)))
+		self.sendCmd("SQUERY", service, message)
 
 	def setname(self, name):
 		"""sets server's stored real name"""
@@ -327,7 +341,7 @@ class IRCServerCommands(IRCServer):
 			try:
 				target = self.getClient(target)
 			except IRCError as e:
-				self.logE("No client found: %s" % e)
+				self.logE("No default client found: %s" % e)
 			else:
 				if(target.silenced):
 					prefix = '-'
@@ -335,13 +349,22 @@ class IRCServerCommands(IRCServer):
 					prefix = '+'
 		self.sendCmd("SILENCE", "%s%s" % (prefix, target))
 
-	def stats(self):
+	def stats(self, query="", target=""):
 		"""returns stats about the server"""
-		self.sendCmd("STATS")
+		self.sendCmd("STATS", [query, target])
 
-	def time(self):
+	def summon(self, user, target="", channel=""):#TODO mods
+		"""tells user on host to join"""
+		self.sendCmd("SUMMON", [target, channel])
+
+
+	def time(self, target=""):
 		"""returns local time of the server"""
-		self.sendCmd("TIME")
+		self.sendCmd("TIME", target)
+
+	def trace(self, target=""):#TODO add mods
+		"""find the route to specific server and info about its peers"""
+		self.sendCmd("TRACE", target)
 
 	def uhnames(self):
 		"""returns names in long format"""
@@ -365,27 +388,32 @@ class IRCServerCommands(IRCServer):
 		else:
 			self.sendCmd("USERIP", target)
 
-	def users(self):
+	def users(self, target=""):
 		"""returns list of users and info about them"""
-		self.sendCmd("USERS")
+		self.sendCmd("USERS", target)
 
-	def version(self):
+	def userhost(self, *nickNames):#TODO mods
+		"""returns list of info about each username"""
+		self.sendCmd("USERHOST", list(nicknames))
+
+	def version(self, target=""):
 		"""returns version of server"""
-		self.sendCmd("VERSION")
+		self.sendCmd("VERSION", target)
 
 	def wallops(self, *message):
 		"""sends message to all ops with mode w"""
-		self.sendCmd("WALLOPS", " ".join(message))
+		self.sendCmd("WALLOPS", None, message)
 
-	def whop(self, target):
-		"""returns list of ops matching target"""
-		self.sendCmd("WHO", "%s o" % target)
-
-	def who(self, target):
+	def who(self, target="", operator=False):
 		"""returns list of users matching target"""
-		self.sendCmd("WHO", target)
+		o = ''
+		if operator:
+			o = 'o'
+		self.sendCmd("WHO", [target, o])
 
-
+	def connectServer(self, targetServer, port, remoteServer=""):#TODO add mods
+		"""tells server to connect to another server"""
+		self.sendCmd("CONNECT", [targetServer, port, remoteServer])
 
 
 
