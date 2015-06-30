@@ -1,7 +1,7 @@
 """
 IRC connection class
 Matthew Russell
-last updated June 25, 2015
+last updated June 29, 2015
 
 handles connecting, reconnecting, disconnecting, data I/O, and silently pings
 
@@ -16,6 +16,9 @@ from IRCerrors import IRCIOError
 PING = re.compile(r':?PING ?(.*)')
 
 class IRCConnection():
+	realName = "https://github.com/Clarvel/Py3bot"
+	_reconnectTimeout = 300
+
 	def __init__(self, host, port, nickCB, parseCB, password = None):
 		self.host = host
 		self.port = port
@@ -23,7 +26,6 @@ class IRCConnection():
 		self._nickNameCallback = nickCB
 		self._parseCallback = parseCB
 		self._buffer = ""
-		self._reconnectTimeout = 300
 		self._connected = False
 		self._connection = None
 
@@ -44,9 +46,9 @@ class IRCConnection():
 
 		if(self.password):
 			self.sendData("PASS %s" % (self.password))
-		self.sendData("USER %s %s * :%s" % (nickName, socket.gethostname(), 
-			nickName))
 		self.sendData("NICK %s" % nickName)
+		self.sendData("USER %s %s * :%s" % (nickName, socket.gethostname(), 
+			self.realName))
 
 		self._listenEvent.clear()
 
