@@ -82,8 +82,7 @@ class IRCServer():
 			a=0
 			for a in range(strLim, len(message), strLim):
 				self.sendData("%s :%s" % (command, message[a-strLim:a]))
-			if a != len(message)-1:
-				self.sendData("%s :%s" % (command, message[a:len(message)]))
+			self.sendData("%s :%s" % (command, message[a:len(message)]))
 		else:
 			self.sendData(command)
 
