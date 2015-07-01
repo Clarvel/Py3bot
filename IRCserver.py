@@ -80,7 +80,7 @@ class IRCServer():
 				meta = " ".join(meta)
 			command = "%s %s" % (command, meta)
 		if message:
-			msg = " ".join(message)
+			msg = " ".join(list(message))
 			strLim = MESSAGE_LENGTH_LIMIT - (len(command) + 2)
 			a=0
 			for a in range(strLim, len(msg), strLim):

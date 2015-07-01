@@ -121,7 +121,7 @@ class IRCServerCommands(IRCServer):
 
 	def message(self, target, *message):
 		""" Message channel or user. """
-		self.sendCmd("PRIVMSG", target, message)
+		self.sendCmd("PRIVMSG", target, *message)
 
 	def _message(self, *message):
 		""" Message current channel or user. """
@@ -130,7 +130,7 @@ class IRCServerCommands(IRCServer):
 		except IRCError as e:
 			self.logE("No default nick/channel to receive message: %s" % (e))
 		else:
-			self.message("PRIVMSG", target, message)
+			self.message("PRIVMSG", target, *message)
 
 	def action(self, target, *message):
 		"""action command, does /me on specified channel"""
@@ -254,7 +254,7 @@ class IRCServerCommands(IRCServer):
 
 	def invite(self, nickName, channel): #TODO add to mod
 		"""invites nickName to channel"""
-		self.sendCmd("INVITE", [nickname, channel)]
+		self.sendCmd("INVITE", [nickname, channel])
 
 	def ison(self, *nickNames):
 		"""check nicknames in list are on network"""
@@ -316,7 +316,7 @@ class IRCServerCommands(IRCServer):
 
 	def service(self, nickName, distribution, info):
 		""" SERVICE command to register a new service."""
-		self.sendCmd("SERVICE", [nickname, '*', distribution, '0', '0'] info)
+		self.sendCmd("SERVICE", [nickname, '*', distribution, '0', '0'], info)
 
 	def servlist(self, mask="", type_=""):
 		"""returns services on network"""
