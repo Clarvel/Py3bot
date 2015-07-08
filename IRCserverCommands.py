@@ -65,7 +65,7 @@ class IRCServerCommands(IRCServer):
 			except IRCError as e:
 				self.logE("No default channel to part from: %s" % (e))
 				return
-		self.sendCmd('PART', channel, message)
+		self.sendCmd('PART', channel, *message)
 
 	def kick(self, target, channel=None, *reason):
 		""" Kick user from channel. """
@@ -84,7 +84,7 @@ class IRCServerCommands(IRCServer):
 				except IRCError as e:
 					self.logE("Channel not found: %s" % (e))
 					return
-			self.sendCmd('KICK', [channel, target], reason)
+			self.sendCmd('KICK', [channel, target], *reason)
 
 	def ban(self, target, channel=None, range=0):
 		"""
@@ -109,15 +109,15 @@ class IRCServerCommands(IRCServer):
 		Kick and ban user from channel.
 		"""
 		self.ban(target, channel, range)
-		self.kick(target, channel, reason)
+		self.kick(target, channel, *reason)
 
 	def quit(self, *message):
 		""" Quit network. """
-		self.sendCmd("QUIT", None, message)
+		self.sendCmd("QUIT", None, *message)
 
 	def squit(self, server, *message):
 		""" Tell server to disconnect server links"""
-		self.sendCmd("SQUIT", server, message)
+		self.sendCmd("SQUIT", server, *message)
 
 	def message(self, target, *message):
 		""" Message channel or user. """
@@ -152,7 +152,7 @@ class IRCServerCommands(IRCServer):
 			except IRCError as e:
 				self.logE("No such nick/channel: %s" % (e))
 				return
-		self.sendCmd("NOTICE", target, message)
+		self.sendCmd("NOTICE", target, *message)
 
 	def userMode(self, mode):
 		"""set mode on self"""
@@ -196,11 +196,11 @@ class IRCServerCommands(IRCServer):
 			except IRCError as e:
 				self.logE("No such channel: %s" % (e))
 				return
-		self.sendCmd('TOPIC', channel, topic)
+		self.sendCmd('TOPIC', channel, *topic)
 
 	def away(self, *message):
 		""" Mark self as away. """
-		self.sendCmd('AWAY', None, message)
+		self.sendCmd('AWAY', None, *message)
 
 	def back(self):
 		""" Mark self as not away. """
@@ -216,7 +216,7 @@ class IRCServerCommands(IRCServer):
 		"""
 		Return information about an offline user.
 		"""
-		self.sendCmd('WHOWAS', [target] + params)
+		self.sendCmd('WHOWAS', [target] + list(params))
 
 	def admin(self, target=""):
 		"""should return server's administrator information"""
@@ -242,7 +242,7 @@ class IRCServerCommands(IRCServer):
 			except IRCError as e:
 				self.logE("No default Channel/Client: %s" % (e))
 				return
-		self.sendCmd('CPRIVMSG', [channel, target], message)
+		self.sendCmd('CPRIVMSG', [channel, target], *message)
 
 	def die(self): # todo Mods
 		"""shutdown the server"""
@@ -265,11 +265,11 @@ class IRCServerCommands(IRCServer):
 		forcibly removes client from network
 		only for use by IRC ops
 		"""
-		self.sendCmd("KILL", target, message)
+		self.sendCmd("KILL", target, *message)
 
 	def knock(self, channel, *message):#TODO mods
 		"""notice to invite only channel with message"""
-		self.sendCmd("KNOCK", channel, message)
+		self.sendCmd("KNOCK", channel, *message)
 
 	def list(self, *channels):
 		"""
@@ -402,7 +402,7 @@ class IRCServerCommands(IRCServer):
 
 	def wallops(self, *message):
 		"""sends message to all ops with mode w"""
-		self.sendCmd("WALLOPS", None, message)
+		self.sendCmd("WALLOPS", None, *message)
 
 	def who(self, target="", operator=False):
 		"""returns list of users matching target"""
