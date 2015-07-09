@@ -33,6 +33,8 @@ class IRCServerCommands(IRCServer):
 				return self._methods[command](*options)
 			else:
 				raise IRCServerError("Command not found! %s" % e)
+		except IRCServerError as e:
+			return "[IRCServerError]: %s" % (e)
 
 
 	def nick(self, name):

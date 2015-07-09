@@ -11,12 +11,14 @@ SERVERS = {
 		"QUITMSG" : "Bye"
 	},
 }
-NICKS = ["Py3Bot", "Pybubbles", "PI", "PY", "PyBot"]
+NICKNAMES = ["Py3Bot", "Pybubbles", "PI", "PY", "PyBot"]
+REAL_NAME = "https://github.com/Clarvel/Py3bot"
+LOGIN_NAME = "Py3Bot"
 ALERTCHAR = "@"
 CHANNEL_PREFIXES = ['#', '&', '+', '!']
 MESSAGE_LENGTH_LIMIT = 510
-NICKNAME_PREFIXES = ['@', '%', '+', '~'] # OP, halfOP, voice, channel owner
-FORBIDDEN_CHARACTERS = { '\r', '\n', '\0' }
+NICKNAME_PREFIXES = ['@', '%', '+', '~', '&'] # OP, halfOP, voice, channel owner, ???
+#FORBIDDEN_CHARACTERS = { '\r', '\n', '\0' }
 CHANNEL_SIGILS = {
 	'PUBLIC' : "=",
 	'PRIVATE' : "@",

@@ -21,11 +21,6 @@ class IRCServerRFC2812(IRCServerModable):
 	_USER = re.compile(r'(\S+)!(\S+)@(\S+)') # (nick)(loginNick)(IP)
 	_ACTION = re.compile(r'^\x01ACTION (.*)\x01')
 
-	def connect(self):
-		super().connect()
-		self._connectEvent = threading.Event()
-		self._connectEvent.wait()
-
 	def _parseInput(self, line):
 		"""
 		to parse input:
@@ -38,33 +33,38 @@ class IRCServerRFC2812(IRCServerModable):
 		"""
 		#print(line)
 		a = self._MESSAGE.match(line)
-		if(a):
-			sender = a.group(1)
-			b = self._USER.match(a.group(1))
-			if(b):
-				try:
-					sender = self.getReceiver(b.group(1))
-				except Exception:
-					sender = self._newReceiver(b.group(1))
-				sender.loginName = b.group(2)
-				sender.address = b.group(3)
-
-			try:
-				recipient = self.getReceiver(a.group(3))
-			except Exception:
-				#recipient is not a known channel/user/me, 
-				#don't make a new one implicitly
-				recipient = a.group(3)
-				pass
-
-			try:
-				#args = a for a in [sender, recipient, a.group(4), a.group(5)] if a
-				getattr(self, "_on_%s"%(a.group(2).lower()))(sender, recipient, a.group(4), a.group(5))
-			except AttributeError as e:
-				self.logE("Could not find command [%s] for line [%s]: %s" % (a.group(2), line, e))
-		else:
+		if not a:
 			self.logE("Input wasn't an IRC server message! [%s]" % (line))
+			return
 
+		sender = a.group(1)
+		b = self._USER.match(a.group(1))
+		if(b):
+			try:
+				sender = self.getReceiver(b.group(1))
+			except Exception:
+				sender = self._newReceiver(b.group(1))
+			sender.loginName = b.group(2)
+			sender.address = b.group(3)
+
+		try:
+			recipient = self.getRecipient(a.group(3))
+		except Exception:
+			#recipient is not a known channel/user/me, 
+			#don't make a new one implicitly, could be a service
+			recipient = a.group(3)
+
+		command = a.group(2).lower()
+		try:
+			#args = a for a in [sender, recipient, a.group(4), a.group(5)] if a
+			getattr(self, "_on_%s"%(command))(sender, recipient, a.group(4), a.group(5))
+		except AttributeError:
+			#assume command doesn't exist, use default
+			self._onDefault(sender, recipient, command, meta, message)
+
+	def _onDefault(self, sender, recipient, command, meta, message):
+		self.log("[%s] %s" % (command, message))
+		self._callMods("on%s"%command.title())
 	## Callback handlers.
 
 	def _on_error(self, sender, recipient, meta, message):
@@ -114,24 +114,22 @@ class IRCServerRFC2812(IRCServerModable):
 		self.log("Set mode %s for %s on %s" % (message, recipient, sender))
 		self._callMods("onMode", sender, recipient, message)
 
-	def _on_nick(self, sender, recipient, meta, message):#TODO for channel containing sender, log
+	def _on_nick(self, sender, recipient, meta, message):
 		""" NICK command. """
 		self.log("%s is now known as %s" % (sender, message))
-		sender.name = message
+		self._renameReceiver(sender.name, message)
 		self._callMods("onNick", sender, message)
 
 	def _on_notice(self, sender, recipient, meta, message):
 		"""
 		NOTICE command.
-		if sender is the server, will be a string value
+		if sender is the server, will be a string value and recipient will be 
+		a service
 		"""
-		if(sender == self.getHost()):
-			self.log("Notice: %s" % (message))
+		if(isinstance(recipient, IRCReceiver)):
+			recipient.log("[NOTICE]%s: %s" % (sender, message))
 		else:
-			if(isinstance(recipient, IRCReceiver)):
-				recipient.log("Notice from %s: %s" % (sender, message))
-			else:
-				self.log("[%s]: %s" % (recipient, message))
+			self.log("[NOTICE]: %s" % (message))
 		self._callMods("onNotice", sender, recipient, message)
 
 	def _on_part(self, sender, recipient, meta, message):
@@ -192,6 +190,7 @@ class IRCServerRFC2812(IRCServerModable):
 	def _on_001(self, sender, recipient, meta, message):
 		"""Welcome message."""
 		self.log("%s" % message)
+		self._welcomeEvent.set()
 		self._callMods("on001", message)
 
 	def _on_002(self, sender, recipient, meta, message):
@@ -216,7 +215,7 @@ class IRCServerRFC2812(IRCServerModable):
 
 	def _on_008(self, sender, recipient, meta, message):
 		"""Server notice mask."""
-		self.log("[NOTICE]: %s" % message)
+		self.log("[SNOTICE]: %s" % message)
 		self._callMods("on008", message)
 
 	def _on_042(self, sender, recipient, meta, message):
@@ -384,7 +383,6 @@ class IRCServerRFC2812(IRCServerModable):
 	def _on_376(self, sender, recipient, meta, message):
 		""" End of message of the day. """
 		# MOTD is done, let's tell our bot the connection is ready.
-		self._connectEvent.set()
 		self._callMods("on376")
 
 	def _on_401(self, sender, recipient, meta, message):
@@ -406,7 +404,6 @@ class IRCServerRFC2812(IRCServerModable):
 		""" MOTD is missing. """
 		# MOTD is done, let's tell our bot the connection is ready.
 		self.log("No MOTD")
-		self._connectEvent.set()
 		self._callMods("on422")
 
 	def _on_421(self, sender, recipient, meta, message):
@@ -420,8 +417,14 @@ class IRCServerRFC2812(IRCServerModable):
 		self._callMods("on432", message)
 
 	def _on_433(self, sender, recipient, meta, message):
-		""" Nickname in use. """
-		self.logE("[433]Nickname in use: %s" % message)
+		"""
+		Nickname in use.
+		if waiting for welcome, try a new nick
+		"""
+		self.logE("[433] %s" % message)
+		if not self._welcomeEvent.isSet():
+			self.nick(self.nickNames.next())
+			self._renameReceiver(self._clientObject.name, self.nickNames.val())
 		self._callMods("on433", message)
 
 	def _on_436(self, sender, recipient, meta, message):

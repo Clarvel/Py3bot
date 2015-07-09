@@ -13,7 +13,7 @@ import sys
 
 from logger import Logger
 from IRCerrors import IRCError, IRCBotError
-from settings import SERVERS, NICKS
+from settings import SERVERS
 from IRCserverRFC2812 import IRCServerRFC2812
 from terminalListener import TerminalListener
 
@@ -93,8 +93,7 @@ class IRCBot():
 		"""connect to a server and set to current"""
 		if not ServerID:
 			ServerID = "%s.%i" % (host, int(port))
-		newServ = IRCServerRFC2812(host, int(port), 
-			self._nickNames[0], ServerID, password)
+		newServ = IRCServerRFC2812(host, int(port), ServerID, password)
 		if quitMessage:
 			newServ.quitMessage = quitMessage
 		newServ.connect()

@@ -10,7 +10,6 @@ from logger import Logger
 class IRCReceiver():
 	def __init__(self, name, host):
 		self.name = name
-		self.server = host
 		self._logger = Logger("%s/%s" % (host, self.name))
 
 	def __str__(self):
@@ -23,9 +22,6 @@ class IRCReceiver():
 	def sendMessage(self, message, receiver):
 		pass
 		#self.server.sendMessage(message, receiver)
-
-	def recvMessage(self, message, sender):
-		self.log("%s: %s" % (sender, message))
 
 class IRCChannel(IRCReceiver):
 	def __init__(self, name, host, topic='No topic'):
