@@ -17,7 +17,7 @@ from settings import NICKNAME_PREFIXES, ALERTCHAR, AUTO_INVITE
 from IRCreceivers import IRCReceiver
 
 class IRCServerRFC2812(IRCServerModable):
-	_MESSAGE = re.compile(r'^:(\S+) (\S+)(?: ([^:]\S+))?(?: ([^:].+?))?(?: :(.+))?$') # (sender)(command)(recipient)(meta)(message)
+	_MESSAGE = re.compile(r'^:(\S+) (\S+)(?: ([^:]\S*))?(?: ([^:].*?))?(?: :(.+))?$') # (sender)(command)(recipient)(meta)(message)
 	_USER = re.compile(r'(\S+)!(\S+)@(\S+)') # (nick)(loginNick)(IP)
 	_ACTION = re.compile(r'^\x01ACTION (.*)\x01')
 
@@ -62,9 +62,11 @@ class IRCServerRFC2812(IRCServerModable):
 			#assume command doesn't exist, use default
 			self._onDefault(sender, recipient, command, meta, message)
 
+
 	def _onDefault(self, sender, recipient, command, meta, message):
-		self.log("[%s] %s" % (command, message))
-		self._callMods("on%s"%command.title())
+		self.log("%s -> %s [%s] %s :%s" % (sender, recipient, command, meta, message))
+
+
 	## Callback handlers.
 
 	def _on_error(self, sender, recipient, meta, message):
@@ -235,7 +237,7 @@ class IRCServerRFC2812(IRCServerModable):
 
 	def _on_252(self, sender, recipient, meta, message):
 		"""Amount of operators online."""
-		self.log("%s" % (meta))
+		self.log("%s operators online" % (meta))
 		self._callMods("on252", meta)
 
 	def _on_253(self, sender, recipient, meta, message):
